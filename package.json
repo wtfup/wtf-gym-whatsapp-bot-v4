@@ -1,0 +1,19 @@
+{
+  "name": "wtf-whatsapp-dashboard",
+  "version": "1.0.0",
+  "description": "WhatsApp Message Intelligence System with Real-time Dashboard",
+  "scripts": {
+    "dev": "node start-dev.js",
+    "start": "node run-system.js",
+    "test": "node run-system.js",
+    "install-all": "cd backend && npm install && cd ../frontend && npm install",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+} 

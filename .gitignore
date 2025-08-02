@@ -1,0 +1,94 @@
+# Dependencies
+node_modules/
+*/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Production builds
+frontend/build/
+frontend/dist/
+backend/dist/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.prod
+
+# Database files
+backend/dev.db
+backend/dev.db-*
+backend/*.db
+backend/*.db-*
+
+# Session storage
+backend/storage/
+backend/session/
+backend/.wwebjs_auth/
+backend/.wwebjs_cache/
+
+# Logs
+logs/
+*.log
+backend/logs/
+frontend/logs/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs
+build/
+dist/
+*.tgz
+*.tar.gz
+
+# Temporary files
+tmp/
+temp/
+
+# WhatsApp Web JS Cache
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Puppeteer
+.cache/
+puppeteer/
+
+# React
+frontend/.eslintcache
+
+# Misc
+*.tsbuildinfo
+.npm/
+.eslintcache
+.parcel-cache

@@ -1,0 +1,30 @@
+{
+  "name": "wtf-whatsapp-backend",
+  "version": "1.0.0",
+  "description": "WhatsApp Backend with Real-time Messaging",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "axios": "^1.11.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "qrcode-terminal": "^0.12.0",
+    "socket.io": "^4.7.2",
+    "whatsapp-web.js": "file:../../wtf-gym-whatsapp-bot-v4/whatsapp-web.js"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "prisma": "^5.22.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
