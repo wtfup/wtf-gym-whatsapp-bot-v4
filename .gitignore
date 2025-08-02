@@ -10,13 +10,13 @@ frontend/build/
 frontend/dist/
 backend/dist/
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.prod
+# Environment variables - REMOVED TO INCLUDE PROD CONFIGS
+# .env
+# .env.local
+# .env.development.local
+# .env.test.local
+# .env.production.local
+# .env.prod
 
 # Database files
 backend/dev.db
