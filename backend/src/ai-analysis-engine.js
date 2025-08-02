@@ -230,6 +230,34 @@ Return only valid JSON format:
       confidence: Math.min(Math.max(analysis.confidence || 0.5, 0), 1)
     };
 
+    // CONSISTENCY FIX: Ensure logical consistency between flagging and sentiment
+    if (validated.flagging.shouldFlag) {
+      const flagReasons = validated.flagging.flagReasons.join(' ').toLowerCase();
+      const category = validated.flagging.category.toLowerCase();
+      
+      // If flagged for complaint/issue/problem, sentiment should be negative
+      if (category === 'complaint' || 
+          flagReasons.includes('complaint') || 
+          flagReasons.includes('issue') || 
+          flagReasons.includes('problem') ||
+          flagReasons.includes('समस्या') ||
+          flagReasons.includes('शिकायत')) {
+        
+        // Override sentiment to negative for consistency
+        if (validated.sentiment.sentiment === 'neutral' || validated.sentiment.sentiment === 'positive') {
+          logger.info(`🔧 CONSISTENCY FIX: Changing sentiment from ${validated.sentiment.sentiment} to negative due to complaint/issue flagging`);
+          validated.sentiment.sentiment = 'negative';
+          validated.sentiment.confidence = Math.max(validated.sentiment.confidence, 0.8); // High confidence for keyword-based detection
+        }
+        
+        // Set intent to complaint if not already set
+        if (validated.intent.intent === 'general') {
+          validated.intent.intent = 'complaint';
+          validated.intent.confidence = Math.max(validated.intent.confidence, 0.8);
+        }
+      }
+    }
+
     return validated;
   }
 

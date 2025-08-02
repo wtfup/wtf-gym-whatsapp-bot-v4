@@ -1,0 +1,147 @@
+// Production Prisma Schema for PostgreSQL
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  messageId   String   @unique
+  fromNumber  String
+  fromName    String?
+  toNumber    String?
+  chatId      String
+  chatName    String?
+  body        String
+  timestamp   DateTime
+  messageType String   @default("text")
+  isGroup     Boolean  @default(false)
+  isFromMe    Boolean  @default(false)
+  hasMedia    Boolean  @default(false)
+  
+  // AI Analysis Fields
+  sentiment   String?  // positive|negative|neutral
+  intent      String?  // complaint|question|booking|general
+  entities    String?  // JSON string of extracted entities
+  confidence  Float?   // AI analysis confidence score
+  
+  // Flagging System
+  isFlagged   Boolean  @default(false)
+  flagReason  String?  // Auto-flagging reason
+  flaggedAt   DateTime?
+  
+  // Media Handling
+  mediaUrl      String?  // Media file URL
+  mediaType     String?  // image|video|audio|document
+  mediaFilename String?  // Original filename
+  mediaSize     Int?     // File size in bytes
+  mimeType      String?  // MIME type (image/jpeg, video/mp4, etc.)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("messages")
+  @@index([timestamp])
+  @@index([fromNumber])
+  @@index([chatId])
+  @@index([isFlagged])
+}
+
+model FlaggedMessage {
+  id          String   @id @default(cuid())
+  messageId   String   @unique
+  fromNumber  String
+  fromName    String?
+  chatId      String
+  chatName    String?
+  body        String
+  timestamp   DateTime
+  
+  // Flagging Details
+  flagReason  String
+  category    String   // complaint|urgent|equipment|staff
+  priority    String   @default("medium") // low|medium|high|critical
+  status      String   @default("pending") // pending|reviewed|resolved
+  
+  // AI Analysis
+  sentiment   String?
+  intent      String?
+  confidence  Float?
+  
+  // Resolution
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  notes       String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("flagged_messages")
+  @@index([status])
+  @@index([priority])
+  @@index([category])
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  number      String   @unique
+  name        String?
+  isGroup     Boolean  @default(false)
+  profilePic  String?
+  lastSeen    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("contacts")
+  @@index([number])
+}
+
+model Chat {
+  id          String   @id @default(cuid())
+  chatId      String   @unique
+  name        String?
+  isGroup     Boolean  @default(false)
+  isArchived  Boolean  @default(false)
+  isMuted     Boolean  @default(false)
+  lastMessage String?
+  lastMessageTime DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("chats")
+  @@index([chatId])
+  @@index([lastMessageTime])
+}
+
+model RoutingRule {
+  id              String   @id @default(cuid())
+  category        String   // complaint|urgent|equipment|staff
+  targetGroupId   String   // WhatsApp group ID for routing
+  targetGroupName String?  // Group name for display
+  isActive        Boolean  @default(true)
+  conditions      String?  // JSON string of routing conditions
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("routing_rules")
+  @@index([category])
+  @@index([isActive])
+}
+
+model SystemConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_config")
+  @@index([key])
+}

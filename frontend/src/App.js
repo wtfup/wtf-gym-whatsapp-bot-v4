@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import {
   Box, CssBaseline, AppBar, Toolbar, IconButton, Typography, Drawer, List, ListItem, ListItemIcon,
-  ListItemText, Divider, useTheme, useMediaQuery, Paper, Snackbar, CircularProgress, Dialog,
-  DialogTitle, DialogContent, DialogActions, Button, Tabs, Tab, FormControl, Select, MenuItem, 
+  ListItemText, Divider, useTheme, useMediaQuery, Paper, Snackbar, CircularProgress, Button, 
+  Tabs, Tab, FormControl, Select, MenuItem, 
   InputBase, Chip, Card, CardContent, Collapse, Switch, FormControlLabel, Pagination, Tooltip,
   Badge, Fab, Table, TableHead, TableBody, TableRow, TableCell, Grid, TextField,
   Alert, Skeleton
@@ -36,6 +36,7 @@ import {
   FilterList as FilterListIcon,
   Refresh as RefreshIcon,
   GetApp as ExportIcon,
+  Download as DownloadIcon,
   Error as ErrorIcon,
   CheckCircle as CheckCircleIcon,
   Menu as MenuIcon,
@@ -43,15 +44,21 @@ import {
   Image as ImageIcon,
   VideoFile as VideoIcon,
   AudioFile as AudioIcon,
-  Description as DocumentIcon
+  AudioFile as AudioFileIcon,
+  Description as DocumentIcon,
+  Description as DescriptionIcon,
+  Message as MessageIcon,
+  Category as CategoryIcon,
+  Psychology as PsychologyIcon
 } from '@mui/icons-material';
 import io from "socket.io-client";
 import { createTheme, ThemeProvider, styled } from "@mui/material/styles";
 import axios from "axios";
+import QRCode from 'qrcode';
 import environment from "./config/environment";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
-import MessageDetailModal from "./components/MessageDetailModal";
+
 import ViewButton from "./components/ViewButton";
 import ConfirmationModal from "./components/ConfirmationModal";
 import AnalyticsModal from "./components/AnalyticsModal";
@@ -79,6 +86,12 @@ import EndpointsPage from './components/EndpointsPage';
 import DashboardHealthMonitor from './components/DashboardHealthMonitor';
 import AIIntelligencePage from './components/AIIntelligencePage';
 import LiveConsole from './components/LiveConsole';
+
+// NEW: Advanced Categorization & Routing Components
+import AdvancedCategorizationPage from './components/AdvancedCategorizationPage';
+import EscalationMonitoringPage from './components/EscalationMonitoringPage';
+import DepartmentPerformanceDashboard from './components/DepartmentPerformanceDashboard';
+import ContextualAnalysisViewer from './components/ContextualAnalysisViewer';
 // Global Frontend Logging System
 import logFrontend, { logDebug, logInfo, logWarn, logError } from './utils/logger';
 import {
@@ -138,7 +151,13 @@ const NAV_ITEMS = [
   { label: "API Endpoints", key: "endpoints", icon: <ApiIcon /> },
   { label: "System Status", key: "status", icon: <SettingsInputAntennaIcon /> },
   { label: "📱 WhatsApp QR (Integrated)", key: "qr", icon: <QrCodeIcon /> },
-  { label: "About", key: "about", icon: <InfoIcon /> },
+      { label: "About", key: "about", icon: <InfoIcon /> },
+    
+    // NEW: Advanced Categorization & Routing Pages
+    { label: "🆕 NEW Advanced Categorization", key: "advanced_categorization", icon: <CategoryIcon /> },
+    { label: "🆕 NEW Escalation Monitoring", key: "escalation_monitoring", icon: <SecurityIcon /> },
+    { label: "🆕 NEW Department Performance", key: "department_performance", icon: <AssessmentIcon /> },
+    { label: "🆕 NEW Contextual Analysis", key: "contextual_analysis", icon: <PsychologyIcon /> },
 ];
 
 // CRITICAL FIX: Force WebSocket protocol explicitly - BUILD VERSION: 2025-07-23-15-50
@@ -573,7 +592,8 @@ const MessageRow = ({ row, onView, onFlag, onEscalate, onAnalyze }) => {
         </Box>
       </TableCell>
       <TableCell>
-        <Box display="flex" gap={0.5}>
+        <Box display="flex" gap={0.5} flexWrap="wrap">
+          {/* AI Flagging Status */}
           {row.flag_type && (
             <Chip 
               label={row.flag_type} 
@@ -582,19 +602,106 @@ const MessageRow = ({ row, onView, onFlag, onEscalate, onAnalyze }) => {
               icon={<FlagIcon />}
             />
           )}
-          {row.sentiment && (
+          
+          {/* AI Sentiment Analysis */}
+          {(row.sentiment || row.ai_sentiment) && (
             <Chip 
-              label={row.sentiment} 
+              label={`😊 ${row.sentiment || row.ai_sentiment}`} 
               size="small" 
-              color={getSentimentColor(row.sentiment)}
+              color={getSentimentColor(row.sentiment || row.ai_sentiment)}
             />
           )}
+          
+          {/* AI Intent Classification */}
+          {(row.intent || row.ai_intent) && (
+            <Chip 
+              label={`🎯 ${row.intent || row.ai_intent}`} 
+              size="small" 
+              color="primary"
+              variant="outlined"
+            />
+          )}
+          
+          {/* NEW: Escalation Risk Indicator */}
+          {row.escalation_score !== undefined && row.escalation_score > 0 && (
+            <Chip 
+              label={`⚡ Risk ${Math.round(row.escalation_score * 100)}%`}
+              size="small" 
+              color={
+                row.escalation_score >= 0.8 ? 'error' :
+                row.escalation_score >= 0.6 ? 'warning' :
+                row.escalation_score >= 0.3 ? 'info' : 'default'
+              }
+              variant={row.escalation_score >= 0.7 ? 'filled' : 'outlined'}
+              sx={{
+                fontWeight: row.escalation_score >= 0.7 ? 'bold' : 'normal',
+                animation: row.escalation_score >= 0.8 ? 'pulse 2s infinite' : 'none'
+              }}
+            />
+          )}
+          
+          {/* Advanced AI Category */}
+          {row.advanced_category && (
+            <Chip 
+              label={
+                row.advanced_category === 'INSTRUCTION' ? '🔧 INSTRUCTION' :
+                row.advanced_category === 'ESCALATION' ? '📢 ESCALATION' :
+                row.advanced_category === 'COMPLAINT' ? '⚠️ COMPLAINT' :
+                row.advanced_category === 'URGENT' ? '🚨 URGENT' :
+                row.advanced_category === 'CASUAL' ? '💬 CASUAL' :
+                row.advanced_category
+              }
+              size="small" 
+              color={
+                row.advanced_category === 'URGENT' ? 'error' :
+                row.advanced_category === 'ESCALATION' ? 'warning' :
+                row.advanced_category === 'COMPLAINT' ? 'warning' :
+                row.advanced_category === 'INSTRUCTION' ? 'info' :
+                'default'
+              }
+              variant={
+                ['URGENT', 'ESCALATION'].includes(row.advanced_category) ? 'filled' : 'outlined'
+              }
+            />
+          )}
+          
+          {/* NEW: Routing Trail Visualization */}
+          {(row.routing_status || row.routed_groups) && (
+            <Chip 
+              label={
+                row.routing_status === 'routed' ? `📤 → ${row.routed_groups || 'Groups'}` :
+                row.routing_status === 'failed' ? '❌ Routing Failed' :
+                row.routing_status === 'pending' ? '⏳ Routing...' :
+                '🔄 Routing Status'
+              }
+              size="small" 
+              color={
+                row.routing_status === 'routed' ? 'success' :
+                row.routing_status === 'failed' ? 'error' :
+                row.routing_status === 'pending' ? 'warning' :
+                'info'
+              }
+              variant="outlined"
+              title={`Routing Strategy: ${row.routing_strategy || 'N/A'}`}
+            />
+          )}
+          
+          {/* Media Status */}
           {row.has_media && (
             <Chip 
-              label="MEDIA" 
+              label={`📎 ${row.media_type?.toUpperCase() || 'MEDIA'}`} 
               size="small" 
               color="info"
               icon={<AttachmentIcon />}
+            />
+          )}
+          
+          {/* Processing Status for Media */}
+          {row.has_media && row.processing_status && (
+            <Chip 
+              label={row.processing_status === 'processing' ? '⏳ Processing' : '✅ Processed'} 
+              size="small" 
+              color={row.processing_status === 'processing' ? 'warning' : 'success'}
             />
           )}
         </Box>
@@ -650,6 +757,16 @@ const FlaggedMessageRow = ({ row, onView, onUnflag, onEscalate }) => {
     return 'info';
   };
 
+  const getSentimentColor = (sentiment) => {
+    if (!sentiment) return 'default';
+    switch (sentiment.toLowerCase()) {
+      case 'positive': return 'success';
+      case 'negative': return 'error';
+      case 'neutral': return 'info';
+      default: return 'default';
+    }
+  };
+
   const formatMessage = (message, hasMedia, mediaType) => {
     if (hasMedia && (!message || message === '[No Text]')) {
       return `📎 ${mediaType?.toUpperCase() || 'MEDIA'} ATTACHMENT`;
@@ -687,19 +804,115 @@ const FlaggedMessageRow = ({ row, onView, onUnflag, onEscalate }) => {
       </TableCell>
       <TableCell>
         <Box display="flex" gap={0.5} flexWrap="wrap">
+          {/* Flag Reason */}
           {row.flag_reason && (
             <Chip 
-              label={row.flag_reason} 
+              label={`🚨 ${row.flag_reason}`} 
               size="small" 
               color={getSeverityColor(row.flag_reason)}
+              icon={<FlagIcon />}
             />
           )}
+          
+          {/* AI Sentiment Analysis */}
+          {(row.sentiment || row.ai_sentiment) && (
+            <Chip 
+              label={`😊 ${row.sentiment || row.ai_sentiment}`} 
+              size="small" 
+              color={getSentimentColor(row.sentiment || row.ai_sentiment)}
+            />
+          )}
+          
+          {/* AI Intent Classification */}
+          {(row.intent || row.ai_intent) && (
+            <Chip 
+              label={`🎯 ${row.intent || row.ai_intent}`} 
+              size="small" 
+              color="primary"
+              variant="outlined"
+            />
+          )}
+          
+          {/* NEW: Escalation Risk Indicator */}
+          {row.escalation_score !== undefined && row.escalation_score > 0 && (
+            <Chip 
+              label={`⚡ Risk ${Math.round(row.escalation_score * 100)}%`}
+              size="small" 
+              color={
+                row.escalation_score >= 0.8 ? 'error' :
+                row.escalation_score >= 0.6 ? 'warning' :
+                row.escalation_score >= 0.3 ? 'info' : 'default'
+              }
+              variant={row.escalation_score >= 0.7 ? 'filled' : 'outlined'}
+              sx={{
+                fontWeight: row.escalation_score >= 0.7 ? 'bold' : 'normal',
+                animation: row.escalation_score >= 0.8 ? 'pulse 2s infinite' : 'none'
+              }}
+            />
+          )}
+          
+          {/* Advanced AI Category */}
+          {row.advanced_category && (
+            <Chip 
+              label={
+                row.advanced_category === 'INSTRUCTION' ? '🔧 INSTRUCTION' :
+                row.advanced_category === 'ESCALATION' ? '📢 ESCALATION' :
+                row.advanced_category === 'COMPLAINT' ? '⚠️ COMPLAINT' :
+                row.advanced_category === 'URGENT' ? '🚨 URGENT' :
+                row.advanced_category === 'CASUAL' ? '💬 CASUAL' :
+                row.advanced_category
+              }
+              size="small" 
+              color={
+                row.advanced_category === 'URGENT' ? 'error' :
+                row.advanced_category === 'ESCALATION' ? 'warning' :
+                row.advanced_category === 'COMPLAINT' ? 'warning' :
+                row.advanced_category === 'INSTRUCTION' ? 'info' :
+                'default'
+              }
+              variant={
+                ['URGENT', 'ESCALATION'].includes(row.advanced_category) ? 'filled' : 'outlined'
+              }
+            />
+          )}
+          
+          {/* NEW: Routing Trail Visualization */}
+          {(row.routing_status || row.routed_groups) && (
+            <Chip 
+              label={
+                row.routing_status === 'routed' ? `📤 → ${row.routed_groups || 'Groups'}` :
+                row.routing_status === 'failed' ? '❌ Routing Failed' :
+                row.routing_status === 'pending' ? '⏳ Routing...' :
+                '🔄 Routing Status'
+              }
+              size="small" 
+              color={
+                row.routing_status === 'routed' ? 'success' :
+                row.routing_status === 'failed' ? 'error' :
+                row.routing_status === 'pending' ? 'warning' :
+                'info'
+              }
+              variant="outlined"
+              title={`Routing Strategy: ${row.routing_strategy || 'N/A'}`}
+            />
+          )}
+          
+          {/* Media Status */}
           {row.has_media && (
             <Chip 
-              label="MEDIA" 
+              label={`📎 ${row.media_type?.toUpperCase() || 'MEDIA'}`} 
               size="small" 
               color="info"
               icon={<AttachmentIcon />}
+            />
+          )}
+          
+          {/* Processing Status for Media */}
+          {row.has_media && row.processing_status && (
+            <Chip 
+              label={row.processing_status === 'processing' ? '⏳ Processing' : '✅ Processed'} 
+              size="small" 
+              color={row.processing_status === 'processing' ? 'warning' : 'success'}
             />
           )}
         </Box>
@@ -864,6 +1077,7 @@ export default function App() {
   const [groupFilter, setGroupFilter] = useState("");
   const [senderFilter, setSenderFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState(""); // NEW: Advanced AI category filter
   const [activeFilters, setActiveFilters] = useState(false);
   
   // UI STATE
@@ -904,6 +1118,10 @@ export default function App() {
   const [confirmationModal, setConfirmationModal] = useState({ open: false, action: null, data: null });
   const [analyticsModal, setAnalyticsModal] = useState({ open: false, title: '', metricType: '', value: 0 });
   const [actionLoading, setActionLoading] = useState(false);
+  
+  // Media viewer states
+  const [mediaViewerOpen, setMediaViewerOpen] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState(null);
 
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("lg"));
@@ -917,15 +1135,31 @@ export default function App() {
       setLoading(true);
       console.log('🚀 Loading initial 100 messages...');
       
-      const response = await axios.get('/api/messages', {
+      const response = await axios.get(apiUrl('/api/messages'), {
         params: { 
           limit: 100,
           order: 'desc' // Get latest messages first
         }
       });
       
-      const messages = response.data.messages || [];
-      const total = response.data.total || 0;
+      // FIXED: Backend returns array directly, not wrapped in .messages
+      let rawMessages = Array.isArray(response.data) ? response.data : [];
+      
+      // FIXED: Map backend field names to frontend field names
+      const messages = rawMessages.map(msg => ({
+        id: msg.id,
+        sender_name: msg.fromName || msg.sender_name || 'Unknown',
+        group_name: msg.chatName || msg.group_name || 'Direct Message',
+        message: msg.body || msg.message || '',
+        received_at: msg.timestamp || msg.received_at || msg.createdAt,
+        number: msg.fromNumber || msg.number || '',
+        has_media: msg.hasMedia || msg.has_media || false,
+        media_type: msg.mediaType || msg.media_type || null,
+        // Keep all original fields as well
+        ...msg
+      }));
+      
+      const total = messages.length;
       
       console.log(`✅ Loaded ${messages.length} initial messages`);
       
@@ -1079,6 +1313,10 @@ export default function App() {
         timestamp: new Date().toISOString()
       });
       setConnectionStatus('connected');
+      
+      // FIXED: Fetch initial WhatsApp status on connection
+      fetchInitialWhatsAppStatus();
+      
       // Re-sync data after reconnection
       if (wasDisconnected) {
         console.log('🔄 Re-syncing data after reconnection...');
@@ -1101,24 +1339,25 @@ export default function App() {
       setConnectionStatus('error');
     });
 
-    // OPTIMIZED: Handle complete message directly (no API fetch needed)
-    socket.on('new_message', (message) => {
+    // FIXED: Listen for both 'message' and 'new_message' events (backend emits 'message')
+    const handleIncomingMessage = (message) => {
       console.log('📨 NEW MESSAGE RECEIVED VIA WEBSOCKET:', message.id, 'from', message.sender_name);
       console.log('📨 Full message object:', message);
       
-      // CRITICAL FIX: Ensure message has all required fields
+      // FIXED: Map socket message fields to frontend expected fields
       const enrichedMessage = {
         id: message.id || `temp_${Date.now()}_${Math.random()}`,
-        sender_name: message.sender_name || 'Unknown Sender',
-        group_name: message.group_name || 'Direct Message',
-        message: message.message || '[No Text]',
-        received_at: message.received_at || new Date().toISOString(),
-        number: message.number || 'Unknown',
-        has_media: message.has_media || false,
-        media_type: message.media_type || null,
+        sender_name: message.fromName || message.sender_name || 'Unknown Sender',
+        group_name: message.chatName || message.group_name || 'Direct Message', 
+        message: message.body || message.message || '[No Text]',
+        received_at: message.timestamp || message.received_at || new Date().toISOString(),
+        number: message.fromNumber || message.number || 'Unknown',
+        has_media: message.hasMedia || message.has_media || false,
+        media_type: message.mediaType || message.media_type || null,
         media_size: message.media_size || null,
         media_filename: message.media_filename || null,
         is_real_time: true,
+        // Keep all original fields as well
         ...message
       };
       
@@ -1170,7 +1409,11 @@ export default function App() {
         console.log('📨 Forcing additional re-render after message addition');
         setForceUpdate(prev => prev + 1);
       }, 50);
-    });
+    };
+
+    // FIXED: Listen for both event types that backend might emit
+    socket.on('message', handleIncomingMessage);
+    socket.on('new_message', handleIncomingMessage);
 
 
 
@@ -1284,10 +1527,37 @@ export default function App() {
       });
     });
 
+      // FIXED: Function to fetch initial WhatsApp status via REST API
+    const fetchInitialWhatsAppStatus = async () => {
+      try {
+        console.log('📱 Fetching initial WhatsApp status...');
+        const response = await fetch(apiUrl('/api/whatsapp/status'));
+        const statusData = await response.json();
+        console.log('📱 Initial WhatsApp Status:', statusData);
+        
+        if (statusData.success) {
+          // FIXED: Set correct status format for UI display
+          setWaStatus(statusData.authenticated ? 'CONNECTED' : 'DISCONNECTED');
+          
+          // Update connection status based on WhatsApp status  
+          if (statusData.authenticated) {
+            setConnectionStatus('connected');
+          } else {
+            setConnectionStatus('disconnected');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error fetching initial WhatsApp status:', error);
+        setWaStatus('error');
+      }
+    };
+
     // ENHANCED: Listen for WhatsApp status updates
     socket.on("whatsapp_status", (statusData) => {
       console.log('📱 WhatsApp Status Update:', statusData);
-      setWaStatus(statusData.status || 'unknown');
+      
+      // FIXED: Set correct status format for UI display
+      setWaStatus(statusData.authenticated ? 'CONNECTED' : 'DISCONNECTED');
       
       // Update connection status based on WhatsApp status
       if (statusData.authenticated) {
@@ -1296,6 +1566,8 @@ export default function App() {
         setConnectionStatus('disconnected');
       }
     });
+
+
 
     // ENHANCED: Listen for contextual AI analysis updates (background processing)
     socket.on("message_ai_update", (updateData) => {
@@ -1825,38 +2097,39 @@ export default function App() {
 
   // Interactive handlers
   const handleMessageClick = (message) => {
-    console.log("✅ handleMessageClick called", message);
-    console.log('🔍 Opening message modal:', {
-      id: message.id,
-      sender: message.sender_name,
-      message: message.message?.substring(0, 50),
-      hasMedia: message.has_media,
-      mediaType: message.media_type,
-      mediaFilename: message.media_filename,
-      mediaSize: message.media_size
-    });
-    
-    // Debug: Check if message is valid
+    // Validate message object
     if (!message || !message.id) {
       console.error('❌ Invalid message object:', message);
       return;
     }
     
-    // CRITICAL FIX: Set state immediately and force re-render
-    console.log('🔍 Setting selectedMessage:', message);
+    // Set selected message and open modal
     setSelectedMessage(message);
-    
-    console.log('🔍 Setting messageDetailOpen to true');
     setMessageDetailOpen(true);
+  };
+
+  // Media view handler
+  const handleMediaView = (message) => {
+    if (!message || (!message.media_url && !message.mediaUrl)) {
+      console.error('❌ No media URL found:', message);
+      return;
+    }
+
+    const mediaUrl = message.media_url || message.mediaUrl;
+    const mediaType = message.media_type || message.mediaType || 'unknown';
     
-    // Force immediate re-render
-    setForceUpdate(prev => prev + 1);
-    
-    // Debug: Check state after a short delay
-    setTimeout(() => {
-      console.log('🔍 State check - selectedMessage:', selectedMessage);
-      console.log('🔍 State check - messageDetailOpen:', messageDetailOpen);
-    }, 100);
+    // Full URL with backend server
+    const fullMediaUrl = mediaUrl.startsWith('http') 
+      ? mediaUrl 
+      : `http://localhost:3010${mediaUrl}`;
+
+    setSelectedMedia({
+      url: fullMediaUrl,
+      type: mediaType,
+      filename: message.media_filename || message.mediaFilename || 'Unknown',
+      size: message.media_size || message.mediaSize || 0
+    });
+    setMediaViewerOpen(true);
   };
 
   const handleBadgeClick = (type, value) => {
@@ -2027,7 +2300,7 @@ export default function App() {
   // AI Analysis function
   const handleAnalyzeMessage = async (message) => {
     try {
-      const response = await axios.post('/api/ai/analyze', {
+      const response = await axios.post(apiUrl('/api/ai/analyze'), {
         message: message.message,
         sender_name: message.sender_name,
         group_name: message.group_name
@@ -2301,6 +2574,12 @@ export default function App() {
             <Route path="/dynamic_categories" element={<DynamicCategoriesPage />} />
             <Route path="/endpoints" element={<EndpointsPage />} />
                       <Route path="/comprehensive_analytics" element={<ComprehensiveAnalyticsDashboard />} />
+            
+            {/* NEW: Advanced Categorization & Routing Routes */}
+            <Route path="/advanced_categorization" element={<AdvancedCategorizationPage />} />
+            <Route path="/escalation_monitoring" element={<EscalationMonitoringPage />} />
+            <Route path="/department_performance" element={<DepartmentPerformanceDashboard />} />
+            <Route path="/contextual_analysis" element={<ContextualAnalysisViewer />} />
 </Routes>
         </Box>
 
@@ -2318,6 +2597,7 @@ export default function App() {
             setGroupFilter("");
             setSenderFilter("");
             setSearch("");
+            setCategoryFilter(""); // NEW: Clear category filter too
             setFiltersOpen(false);
           }}
           allGroups={[...new Set(allLogs.concat(allFlags).map(msg => msg.group_name).filter(Boolean))]}
@@ -2335,12 +2615,211 @@ export default function App() {
           severity="info"
         />
 
-        {/* Enhanced Message Detail Modal */}
-        <MessageDetailModal
-          open={messageDetailOpen}
-          onClose={() => setMessageDetailOpen(false)}
-          message={selectedMessage}
-        />
+        {/* Professional Message Detail Modal */}
+        {messageDetailOpen && (
+          <Box sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 9999,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            backdropFilter: 'blur(4px)'
+          }}>
+            <Box sx={{
+              backgroundColor: 'white',
+              borderRadius: 3,
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              minWidth: { xs: '90vw', sm: '600px', md: '800px' },
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {/* Header */}
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: 'linear-gradient(135deg, #FF6B35 0%, #D10010 100%)',
+                color: 'white',
+                p: 3
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <MessageIcon sx={{ fontSize: 28 }} />
+                  <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                    Message Details
+                  </Typography>
+                </Box>
+                <IconButton 
+                  onClick={() => setMessageDetailOpen(false)}
+                  sx={{ color: 'white' }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+              
+              {/* Content */}
+              <Box sx={{ p: 3, overflow: 'auto', flex: 1 }}>
+                <Grid container spacing={3}>
+                  {/* Basic Info */}
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="h6" sx={{ mb: 2, color: '#FF6B35' }}>
+                      📋 Message Information
+                    </Typography>
+                    <Box sx={{ space: 2 }}>
+                      <Typography sx={{ mb: 1 }}>
+                        <strong>ID:</strong> {selectedMessage?.id || 'N/A'}
+                      </Typography>
+                      <Typography sx={{ mb: 1 }}>
+                        <strong>Sender:</strong> {selectedMessage?.sender_name || selectedMessage?.fromName || 'Unknown'}
+                      </Typography>
+                      <Typography sx={{ mb: 1 }}>
+                        <strong>Group:</strong> {selectedMessage?.group_name || selectedMessage?.chatName || 'Private'}
+                      </Typography>
+                      <Typography sx={{ mb: 1 }}>
+                        <strong>Time:</strong> {selectedMessage?.received_at ? new Date(selectedMessage.received_at).toLocaleString() : 'Unknown'}
+                      </Typography>
+                      <Typography sx={{ mb: 1 }}>
+                        <strong>Phone:</strong> {selectedMessage?.number || selectedMessage?.fromNumber || 'N/A'}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  
+                  {/* Media Info */}
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="h6" sx={{ mb: 2, color: '#FF6B35' }}>
+                      📎 Media & Flags
+                    </Typography>
+                    <Box sx={{ space: 2 }}>
+                      <Typography sx={{ mb: 1 }}>
+                        <strong>Has Media:</strong> {selectedMessage?.has_media || selectedMessage?.hasMedia ? '✅ Yes' : '❌ No'}
+                      </Typography>
+                      {(selectedMessage?.has_media || selectedMessage?.hasMedia) && (
+                        <>
+                          <Typography sx={{ mb: 1 }}>
+                            <strong>Media Type:</strong> {selectedMessage?.media_type || selectedMessage?.mediaType || 'Unknown'}
+                          </Typography>
+                          <Typography sx={{ mb: 1 }}>
+                            <strong>File Size:</strong> {selectedMessage?.media_size || selectedMessage?.mediaSize ? `${selectedMessage.media_size || selectedMessage.mediaSize} bytes` : 'Unknown'}
+                          </Typography>
+                          {/* Media Preview/View Button */}
+                          <Box sx={{ mt: 2 }}>
+                            <Button
+                              variant="contained"
+                              startIcon={<ImageIcon />}
+                              onClick={() => handleMediaView(selectedMessage)}
+                              sx={{
+                                backgroundColor: '#FF6B35',
+                                '&:hover': { backgroundColor: '#D10010' },
+                                mb: 1
+                              }}
+                            >
+                              View {selectedMessage?.media_type || 'Media'}
+                            </Button>
+                            <br />
+                            <Typography variant="caption" color="textSecondary">
+                              URL: {selectedMessage?.media_url || selectedMessage?.mediaUrl || 'Not available'}
+                            </Typography>
+                          </Box>
+                        </>
+                      )}
+                      <Typography sx={{ mb: 1 }}>
+                        <strong>AI Sentiment:</strong> {selectedMessage?.ai_sentiment || 'Not analyzed'}
+                      </Typography>
+                      <Typography sx={{ mb: 1 }}>
+                        <strong>AI Intent:</strong> {selectedMessage?.ai_intent || 'Not classified'}
+                      </Typography>
+                      <Typography sx={{ mb: 1 }}>
+                        <strong>Flagged:</strong> {selectedMessage?.flagged ? '🚨 Yes' : '✅ No'}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  
+                  {/* Message Content */}
+                  <Grid item xs={12}>
+                    <Typography variant="h6" sx={{ mb: 2, color: '#FF6B35' }}>
+                      💬 Message Content
+                    </Typography>
+                    <Paper sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
+                      <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                        {selectedMessage?.message || selectedMessage?.body || 'No content available'}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </Box>
+              
+              {/* Footer Actions */}
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                p: 3,
+                backgroundColor: '#f8f9fa',
+                borderTop: '1px solid #e0e0e0'
+              }}>
+                <Box>
+                  <Chip 
+                    label={selectedMessage?.ai_sentiment || 'neutral'} 
+                    color={selectedMessage?.ai_sentiment === 'positive' ? 'success' : selectedMessage?.ai_sentiment === 'negative' ? 'error' : 'default'}
+                    sx={{ mr: 1 }}
+                  />
+                  <Chip 
+                    label={selectedMessage?.ai_intent || 'general'} 
+                    variant="outlined"
+                    sx={{ mr: 1 }}
+                  />
+                  {selectedMessage?.flagged && (
+                    <Chip label="Flagged" color="error" />
+                  )}
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  {selectedMessage?.flagged ? (
+                    <Button 
+                      variant="outlined" 
+                      color="success"
+                      onClick={() => handleMessageAction('unflag', selectedMessage)}
+                    >
+                      Unflag
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="outlined" 
+                      color="warning"
+                      onClick={() => handleMessageAction('flag', selectedMessage)}
+                    >
+                      Flag
+                    </Button>
+                  )}
+                  <Button 
+                    variant="outlined" 
+                    color="info"
+                    onClick={() => handleMessageAction('escalate', selectedMessage)}
+                  >
+                    Escalate
+                  </Button>
+                  <Button 
+                    variant="contained" 
+                    onClick={() => setMessageDetailOpen(false)}
+                    sx={{ 
+                      backgroundColor: '#FF6B35',
+                      '&:hover': { backgroundColor: '#D10010' }
+                    }}
+                  >
+                    Close
+                  </Button>
+                </Box>
+              </Box>
+            </Box>
+          </Box>
+        )}
+
 
         <ConfirmationModal
           open={confirmationModal.open}
@@ -2365,6 +2844,142 @@ export default function App() {
           onMessageClick={handleMessageClick}
           loading={loading}
         />
+
+        {/* Media Viewer Modal */}
+        {mediaViewerOpen && selectedMedia && (
+          <Box sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            zIndex: 10000,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            backdropFilter: 'blur(4px)'
+          }}>
+            <Box sx={{
+              maxWidth: '95vw',
+              maxHeight: '95vh',
+              p: 2,
+              position: 'relative',
+              backgroundColor: 'black',
+              borderRadius: 2,
+              overflow: 'hidden'
+            }}>
+              {/* Close Button */}
+              <IconButton
+                onClick={() => setMediaViewerOpen(false)}
+                sx={{
+                  position: 'absolute',
+                  top: 16,
+                  right: 16,
+                  backgroundColor: 'rgba(0,0,0,0.7)',
+                  color: 'white',
+                  zIndex: 1,
+                  '&:hover': {
+                    backgroundColor: 'rgba(0,0,0,0.9)'
+                  }
+                }}
+              >
+                <CloseIcon />
+              </IconButton>
+
+              {/* Media Content */}
+              {selectedMedia.type?.toLowerCase() === 'image' ? (
+                <Box sx={{ textAlign: 'center' }}>
+                  <img 
+                    src={selectedMedia.url} 
+                    alt="Media content" 
+                    style={{ 
+                      maxWidth: '100%', 
+                      maxHeight: '85vh', 
+                      objectFit: 'contain',
+                      borderRadius: '8px'
+                    }} 
+                    onError={(e) => {
+                      console.error('Image failed to load:', selectedMedia.url);
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'block';
+                    }}
+                  />
+                  <Box sx={{ display: 'none', color: 'white', p: 4 }}>
+                    <Typography variant="h6">Failed to load image</Typography>
+                    <Typography variant="body2">{selectedMedia.url}</Typography>
+                  </Box>
+                </Box>
+              ) : selectedMedia.type?.toLowerCase() === 'video' ? (
+                <Box sx={{ textAlign: 'center' }}>
+                  <video 
+                    controls 
+                    style={{ 
+                      maxWidth: '100%', 
+                      maxHeight: '85vh',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    <source src={selectedMedia.url} type="video/mp4" />
+                    <source src={selectedMedia.url} type="video/webm" />
+                    Your browser does not support the video tag.
+                  </video>
+                </Box>
+              ) : selectedMedia.type?.toLowerCase() === 'audio' ? (
+                <Box sx={{ textAlign: 'center', p: 4, color: 'white' }}>
+                  <AudioFileIcon sx={{ fontSize: 64, mb: 2 }} />
+                  <Typography variant="h6" sx={{ mb: 2 }}>
+                    {selectedMedia.filename}
+                  </Typography>
+                  <audio 
+                    controls 
+                    style={{ width: '100%', maxWidth: '400px' }}
+                  >
+                    <source src={selectedMedia.url} type="audio/mpeg" />
+                    <source src={selectedMedia.url} type="audio/wav" />
+                    Your browser does not support the audio tag.
+                  </audio>
+                </Box>
+              ) : (
+                <Box sx={{ textAlign: 'center', p: 4, color: 'white' }}>
+                  <DescriptionIcon sx={{ fontSize: 64, mb: 2 }} />
+                  <Typography variant="h6" sx={{ mb: 2 }}>
+                    {selectedMedia.filename}
+                  </Typography>
+                  <Button 
+                    variant="contained" 
+                    startIcon={<DownloadIcon />}
+                    onClick={() => window.open(selectedMedia.url, '_blank')}
+                    sx={{ 
+                      backgroundColor: '#FF6B35',
+                      '&:hover': { backgroundColor: '#D10010' }
+                    }}
+                  >
+                    Download File
+                  </Button>
+                </Box>
+              )}
+
+              {/* Media Info */}
+              <Box sx={{
+                position: 'absolute',
+                bottom: 16,
+                left: 16,
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                color: 'white',
+                p: 2,
+                borderRadius: 1
+              }}>
+                <Typography variant="caption" display="block">
+                  {selectedMedia.filename}
+                </Typography>
+                <Typography variant="caption" display="block">
+                  Type: {selectedMedia.type} | Size: {Math.round(selectedMedia.size / 1024)}KB
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+        )}
 
         {/* Real-time Status Indicator */}
         <Box sx={{
@@ -2642,6 +3257,23 @@ export default function App() {
               </Select>
             </FormControl>
             
+            {/* NEW: Advanced AI Category Filter */}
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <Select
+                value={categoryFilter || ''}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                displayEmpty
+                sx={{ backgroundColor: BRAND_COLORS.white }}
+              >
+                <MenuItem value="">All Categories</MenuItem>
+                <MenuItem value="INSTRUCTION">🔧 INSTRUCTION</MenuItem>
+                <MenuItem value="ESCALATION">📢 ESCALATION</MenuItem>
+                <MenuItem value="COMPLAINT">⚠️ COMPLAINT</MenuItem>
+                <MenuItem value="URGENT">🚨 URGENT</MenuItem>
+                <MenuItem value="CASUAL">💬 CASUAL</MenuItem>
+              </Select>
+            </FormControl>
+            
             <Box sx={{ display: 'flex', alignItems: 'center', backgroundColor: BRAND_COLORS.white, borderRadius: 1, px: 2, py: 1, border: `1px solid ${BRAND_COLORS.border}` }}>
               <SearchIcon sx={{ color: BRAND_COLORS.mediumGray, mr: 1 }} />
               <InputBase
@@ -2675,6 +3307,37 @@ export default function App() {
                 onClick={() => setSearch(search.includes('complaint') ? '' : 'complaint')}
                 color="warning"
               />
+            </Box>
+            
+            {/* NEW: Advanced Configuration Panel */}
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<SettingsIcon />}
+                onClick={() => window.open('/api/whatsapp-groups', '_blank')}
+                sx={{ color: BRAND_COLORS.darkGray, borderColor: BRAND_COLORS.border }}
+              >
+                Groups
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<SettingsIcon />}
+                onClick={() => window.open('/api/routing-rules', '_blank')}
+                sx={{ color: BRAND_COLORS.darkGray, borderColor: BRAND_COLORS.border }}
+              >
+                Rules
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<AnalyticsIcon />}
+                onClick={() => window.open('/api/advanced-analytics', '_blank')}
+                sx={{ color: BRAND_COLORS.darkGray, borderColor: BRAND_COLORS.border }}
+              >
+                Analytics
+              </Button>
             </Box>
             
             {/* Clear Filters Button */}
@@ -3100,13 +3763,145 @@ export default function App() {
     const [status, setStatus] = useState('');
 
     useEffect(() => {
-      fetchQRCode();
+      // Set initial loading state for QR code
+      setQrContent(`
+        <div style="padding: 20px; background: #f5f5f5; border-radius: 8px; margin: 10px 0; text-align: center;">
+          <p>🔄 <strong>Initializing WhatsApp QR Code...</strong></p>
+          <p style="color: #666; font-size: 14px;">Please wait, connecting to WhatsApp service...</p>
+        </div>
+      `);
+
+      // Only fetch initial status, let Socket.IO handle QR codes
       fetchStatus();
       const interval = setInterval(() => {
-        fetchQRCode();
-        fetchStatus();
+        fetchStatus(); // Only refresh status, not QR code
       }, 5000); // Refresh every 5 seconds
-      return () => clearInterval(interval);
+
+      // FIXED: Add Socket.IO listeners for real-time QR code updates
+      const wsUrl = environment.websocketUrl;
+      console.log('🔌 QR View: Connecting to WebSocket:', wsUrl);
+      const qrSocket = io(wsUrl, { 
+        transports: ["websocket", "polling"],
+        timeout: 30000,
+        forceNew: false
+      });
+
+      // Socket.IO connection handlers
+      qrSocket.on("connect", () => {
+        console.log('🔌 QR View: Socket.IO connected successfully');
+        setQrContent(`
+          <div style="padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 10px 0; text-align: center;">
+            <p>✅ <strong>Connected to WhatsApp Service</strong></p>
+            <p style="color: #666; font-size: 14px;">Waiting for QR code generation...</p>
+          </div>
+        `);
+      });
+
+      qrSocket.on("disconnect", () => {
+        console.log('🔌 QR View: Socket.IO disconnected');
+      });
+
+      // Listen for QR code updates from backend in real-time
+      qrSocket.on("qr", (qrData) => {
+        console.log('📱 QR Code received via Socket.IO:', qrData);
+        
+        if (qrData && qrData.qr) {
+          // Generate QR code image from the string
+          QRCode.toDataURL(qrData.qr, {
+            width: 300,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          })
+          .then(qrImageUrl => {
+            // Display QR code as image
+            setQrContent(`
+              <div style="padding: 20px; background: #f5f5f5; border-radius: 8px; margin: 10px 0; text-align: center;">
+                <p style="margin-bottom: 15px;"><strong>📱 Scan this QR code with WhatsApp:</strong></p>
+                <img src="${qrImageUrl}" alt="WhatsApp QR Code" style="max-width: 300px; height: auto; border: 2px solid #25D366; border-radius: 8px;" />
+                <p style="margin-top: 15px; color: #666; font-size: 14px;">Open WhatsApp → Menu → Linked Devices → Link a Device</p>
+                <p style="color: #999; font-size: 12px;">QR code refreshes automatically every 20 seconds</p>
+              </div>
+            `);
+            setLoading(false);
+            console.log('✅ QR Code image generated and displayed');
+          })
+          .catch(error => {
+            console.error('❌ Error generating QR code image:', error);
+            // Fallback to text display
+            setQrContent(`
+              <div style="padding: 20px; background: #f5f5f5; border-radius: 8px; margin: 10px 0;">
+                <p style="margin-bottom: 15px;"><strong>📱 Scan this QR code with WhatsApp:</strong></p>
+                <div style="font-family: monospace; font-size: 12px; line-height: 1.2; background: white; padding: 15px; border-radius: 4px; overflow-wrap: break-word;">
+                  ${qrData.qr}
+                </div>
+                <p style="margin-top: 15px; color: #666; font-size: 14px;">Open WhatsApp → Menu → Linked Devices → Link a Device</p>
+              </div>
+            `);
+            setLoading(false);
+          });
+        }
+      });
+
+      // FIXED: Listen for WhatsApp status updates (main status event)
+      qrSocket.on("whatsapp_status", (statusData) => {
+        console.log('📱 QR View: WhatsApp Status Update:', statusData);
+        
+        if (statusData.authenticated) {
+          // WhatsApp is already authenticated
+          setQrContent(`
+            <div style="padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 10px 0; text-align: center;">
+              <p style="font-size: 18px; margin-bottom: 10px;">✅ <strong>WhatsApp is Connected!</strong></p>
+              <p style="color: #666;">Logged in as: <strong>${statusData.clientInfo?.pushname || 'User'}</strong></p>
+              <p style="color: #666; font-size: 14px;">Real-time message monitoring is active</p>
+              <p style="color: #999; font-size: 12px;">No QR scan needed - already authenticated</p>
+            </div>
+          `);
+          setLoading(false);
+        } else if (statusData.status === 'qr_available') {
+          // QR code is available for scanning
+          setQrContent(`
+            <div style="padding: 20px; background: #fff3cd; border-radius: 8px; margin: 10px 0; text-align: center;">
+              <p style="font-size: 16px; margin-bottom: 10px;">📱 <strong>WhatsApp Not Connected</strong></p>
+              <p style="color: #666; font-size: 14px;">Waiting for QR code...</p>
+            </div>
+          `);
+        }
+      });
+
+      // Listen for WhatsApp authentication success (backup event)
+      qrSocket.on("authenticated", (authData) => {
+        console.log('✅ WhatsApp authenticated via Socket.IO:', authData);
+        setQrContent(`
+          <div style="padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 10px 0; text-align: center;">
+            <p style="font-size: 18px; margin-bottom: 10px;">✅ <strong>WhatsApp is Connected!</strong></p>
+            <p style="color: #666;">Logged in as: <strong>${authData.pushname || 'User'}</strong></p>
+            <p style="color: #666; font-size: 14px;">Real-time message monitoring is active</p>
+          </div>
+        `);
+        setLoading(false);
+      });
+
+      // Listen for WhatsApp ready status
+      qrSocket.on("ready", (readyData) => {
+        console.log('🚀 WhatsApp ready via Socket.IO:', readyData);
+        setQrContent(`
+          <div style="padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 10px 0; text-align: center;">
+            <p style="font-size: 18px; margin-bottom: 10px;">✅ <strong>WhatsApp is Connected & Ready!</strong></p>
+            <p style="color: #666;">Logged in as: <strong>${readyData.pushname || 'User'}</strong> (${readyData.number || 'Unknown'})</p>
+            <p style="color: #666; font-size: 14px;">Real-time message monitoring is active</p>
+            <p style="color: #666; font-size: 12px;">Platform: ${readyData.platform || 'Unknown'}</p>
+          </div>
+        `);
+        setLoading(false);
+      });
+
+      return () => {
+        clearInterval(interval);
+        qrSocket.disconnect();
+      };
     }, []);
 
     const fetchQRCode = async () => {
@@ -3368,6 +4163,12 @@ export default function App() {
             <Route path="/dynamic_categories" element={<DynamicCategoriesPage />} />
             <Route path="/endpoints" element={<EndpointsPage />} />
             <Route path="/comprehensive_analytics" element={<ComprehensiveAnalyticsDashboard />} />
+            
+            {/* NEW: Advanced Categorization & Routing Routes */}
+            <Route path="/advanced_categorization" element={<AdvancedCategorizationPage />} />
+            <Route path="/escalation_monitoring" element={<EscalationMonitoringPage />} />
+            <Route path="/department_performance" element={<DepartmentPerformanceDashboard />} />
+            <Route path="/contextual_analysis" element={<ContextualAnalysisViewer />} />
           </Routes>
         </Box>
 
@@ -3385,6 +4186,7 @@ export default function App() {
             setGroupFilter("");
             setSenderFilter("");
             setSearch("");
+            setCategoryFilter(""); // NEW: Clear category filter too
             setFiltersOpen(false);
           }}
           allGroups={[...new Set(allLogs.concat(allFlags).map(msg => msg.group_name).filter(Boolean))]}

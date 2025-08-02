@@ -5,7 +5,7 @@ const isLocalEnvironment = () => {
   // Multiple ways to detect local environment
   const hostname = window.location.hostname;
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
-  const isLocalPort = window.location.port === '3000';
+  const isLocalPort = window.location.port === '5010';
   const isDevelopment = process.env.NODE_ENV === 'development';
   
   return isLocalhost || isLocalPort || isDevelopment;
@@ -17,12 +17,12 @@ const environment = {
   
   // API Base URL
   get apiBaseUrl() {
-    return this.isLocal ? 'http://localhost:3000' : 'https://wtf-whatsapp-bot.fly.dev';
+    return this.isLocal ? 'http://localhost:3010' : 'https://wtf-whatsapp-bot.fly.dev';
   },
   
   // WebSocket URL  
   get websocketUrl() {
-    return this.isLocal ? 'ws://localhost:3000' : 'wss://wtf-whatsapp-bot.fly.dev';
+    return this.isLocal ? 'ws://localhost:3010' : 'wss://wtf-whatsapp-bot.fly.dev';
   },
   
   // Health Check URL

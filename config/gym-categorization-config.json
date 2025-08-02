@@ -1,0 +1,273 @@
+{
+  "gym_categorization_config": {
+    "version": "2.0.0",
+    "last_updated": "2024-01-20",
+    "description": "Comprehensive gym-specific categorization configuration for WhatsApp message analysis",
+    
+    "categories": {
+      "INSTRUCTION": {
+        "description": "Gym operational instructions, equipment guidance, and service inquiries",
+        "priority": 4,
+        "confidence_threshold": 0.7,
+        "escalation_threshold": 3,
+        "routing_departments": ["EQUIPMENT_MAINTENANCE", "FACILITY_MANAGEMENT"],
+        "keywords": {
+          "english": [
+            "how to use", "equipment guide", "machine instruction", "workout help",
+            "training guidance", "exercise form", "gym rules", "timing schedule",
+            "membership details", "registration process", "booking procedure",
+            "locker usage", "facility tour", "class schedule", "trainer assignment",
+            "payment method", "renewal process", "guest policy", "dress code"
+          ],
+          "hindi": [
+            "कैसे उपयोग करें", "उपकरण गाइड", "मशीन निर्देश", "व्यायाम सहायता",
+            "प्रशिक्षण मार्गदर्शन", "व्यायाम फॉर्म", "जिम नियम", "समय सारणी",
+            "सदस्यता विवरण", "पंजीकरण प्रक्रिया", "बुकिंग प्रक्रिया",
+            "लॉकर उपयोग", "सुविधा दौरा", "क्लास शेड्यूल", "ट्रेनर असाइनमेंट"
+          ],
+          "hinglish": [
+            "gym kaise use kare", "machine ka instruction", "workout kaise kare",
+            "timing kya hai", "membership kaise le", "trainer chahiye",
+            "equipment guide do", "form check karo", "rules kya hai"
+          ]
+        },
+        "business_context": {
+          "response_time_target": 300,
+          "auto_reply_templates": [
+            "We'll help you with equipment guidance. Please specify which machine or exercise you need help with.",
+            "For detailed gym instructions, please visit our help desk or speak with our trainers."
+          ]
+        }
+      },
+      
+      "COMPLAINT": {
+        "description": "Customer complaints about facilities, equipment, staff, or services",
+        "priority": 3,
+        "confidence_threshold": 0.75,
+        "escalation_threshold": 2,
+        "routing_departments": ["CUSTOMER_SERVICE", "FACILITY_MANAGEMENT", "MANAGEMENT"],
+        "keywords": {
+          "english": [
+            "broken equipment", "dirty facility", "poor service", "rude staff",
+            "malfunctioning machine", "unclean bathroom", "bad smell", "noisy environment",
+            "overcrowded", "long wait time", "billing issue", "membership problem",
+            "trainer complaint", "facility complaint", "service complaint",
+            "dissatisfied", "disappointed", "frustrated", "unhappy", "terrible experience"
+          ],
+          "hindi": [
+            "टूटे उपकरण", "गंदी सुविधा", "खराब सेवा", "अशिष्ट कर्मचारी",
+            "खराब मशीन", "गंदा बाथरूम", "बुरी गंध", "शोर वातावरण",
+            "भीड़भाड़", "लंबा इंतजार", "बिलिंग समस्या", "सदस्यता समस्या",
+            "शिकायत", "समस्या", "परेशानी", "नाराज", "निराश"
+          ],
+          "hinglish": [
+            "equipment kharab hai", "gym ganda hai", "staff rude hai",
+            "machine nahi chal raha", "bahut dirty hai", "smell aa rahi",
+            "billing galat hai", "service very bad", "trainer problem hai"
+          ]
+        },
+        "escalation_triggers": [
+          "safety concern", "health hazard", "repeated issue", "multiple complaints",
+          "staff misconduct", "billing dispute", "membership cancellation"
+        ],
+        "business_context": {
+          "response_time_target": 900,
+          "follow_up_required": true,
+          "satisfaction_survey": true,
+          "auto_reply_templates": [
+            "We apologize for the inconvenience. Your complaint has been registered and will be addressed within 15 minutes.",
+            "Thank you for bringing this to our attention. A manager will contact you shortly to resolve this issue."
+          ]
+        }
+      },
+      
+      "ESCALATION": {
+        "description": "Frustrated customers, repeated complaints, or high-risk situations requiring immediate attention",
+        "priority": 2,
+        "confidence_threshold": 0.8,
+        "escalation_threshold": 1,
+        "routing_departments": ["MANAGEMENT", "CUSTOMER_SERVICE"],
+        "keywords": {
+          "english": [
+            "speaking to manager", "escalate this", "file complaint", "take action",
+            "unacceptable", "repeatedly told", "many times", "again and again",
+            "fed up", "frustrated", "angry", "furious", "demanding refund",
+            "cancel membership", "legal action", "consumer court", "poor management",
+            "waste of money", "terrible service", "worst experience"
+          ],
+          "hindi": [
+            "मैनेजर से बात", "शिकायत दर्ज", "कार्रवाई करें", "अस्वीकार्य",
+            "बार-बार कहा", "कई बार", "फिर से", "तंग आ गया",
+            "परेशान", "गुस्सा", "नाराज", "रिफंड चाहिए", "सदस्यता रद्द",
+            "कानूनी कार्रवाई", "उपभोक्ता अदालत", "खराब प्रबंधन", "पैसे बर्बाद"
+          ],
+          "hinglish": [
+            "manager se baat karna hai", "bahut baar bola", "fed up ho gaya",
+            "refund chahiye", "membership cancel karo", "very frustrated",
+            "action lena hoga", "enough ho gaya", "waste of money hai"
+          ]
+        },
+        "immediate_actions": [
+          "notify_management", "priority_response", "escalation_protocol", "manager_intervention"
+        ],
+        "business_context": {
+          "response_time_target": 300,
+          "management_notification": true,
+          "priority_handling": true,
+          "customer_retention_protocol": true
+        }
+      },
+      
+      "URGENT": {
+        "description": "Emergency situations, safety concerns, or critical issues requiring immediate response",
+        "priority": 1,
+        "confidence_threshold": 0.85,
+        "escalation_threshold": 1,
+        "routing_departments": ["MANAGEMENT", "SECURITY", "FACILITY_MANAGEMENT"],
+        "keywords": {
+          "english": [
+            "emergency", "urgent help", "safety issue", "accident", "injury",
+            "fire", "smoke", "gas leak", "electrical problem", "equipment fallen",
+            "someone hurt", "medical emergency", "call ambulance", "call police",
+            "security issue", "theft", "harassment", "immediate help",
+            "danger", "hazard", "risk", "unsafe condition"
+          ],
+          "hindi": [
+            "आपातकाल", "तुरंत मदद", "सुरक्षा समस्या", "दुर्घटना", "चोट",
+            "आग", "धुआं", "गैस लीक", "बिजली की समस्या", "उपकरण गिरा",
+            "कोई घायल", "चिकित्सा आपातकाल", "एम्बुलेंस बुलाओ", "पुलिस बुलाओ",
+            "सुरक्षा समस्या", "चोरी", "उत्पीड़न", "तुरंत सहायता",
+            "खतरा", "जोखिम", "असुरक्षित स्थिति"
+          ],
+          "hinglish": [
+            "emergency hai", "urgent help chahiye", "accident ho gaya",
+            "koi injured hai", "fire lagi hai", "safety problem hai",
+            "ambulance bulao", "police bulao", "danger hai",
+            "security issue hai", "help karo immediately"
+          ]
+        },
+        "emergency_protocols": [
+          "immediate_notification", "emergency_services", "facility_lockdown", "evacuation_procedure",
+          "medical_response", "security_alert", "management_notification"
+        ],
+        "business_context": {
+          "response_time_target": 60,
+          "emergency_contact": true,
+          "incident_logging": true,
+          "follow_up_required": true
+        }
+      },
+      
+      "CASUAL": {
+        "description": "General conversation, greetings, appreciation, and non-urgent communication",
+        "priority": 5,
+        "confidence_threshold": 0.6,
+        "escalation_threshold": 5,
+        "routing_departments": ["CUSTOMER_SERVICE"],
+        "keywords": {
+          "english": [
+            "hello", "hi", "good morning", "good evening", "thank you",
+            "thanks", "great service", "awesome gym", "love this place",
+            "excellent staff", "keep it up", "well done", "appreciate",
+            "nice facility", "good workout", "enjoyed session",
+            "see you tomorrow", "have a good day", "bye", "goodbye"
+          ],
+          "hindi": [
+            "नमस्ते", "हैलो", "सुप्रभात", "शुभ संध्या", "धन्यवाद",
+            "शुक्रिया", "बेहतरीन सेवा", "शानदार जिम", "यह जगह पसंद है",
+            "उत्कृष्ट कर्मचारी", "जारी रखें", "अच्छा काम", "सराहना",
+            "अच्छी सुविधा", "अच्छा वर्कआउट", "सत्र का आनंद लिया"
+          ],
+          "hinglish": [
+            "namaste", "thank you so much", "gym bahut achha hai",
+            "great workout today", "staff very good", "facility superb",
+            "keep it up", "see you tomorrow", "bye take care"
+          ]
+        },
+        "business_context": {
+          "response_time_target": 1800,
+          "auto_reply_enabled": true,
+          "engagement_opportunity": true
+        }
+      }
+    },
+    
+    "confidence_thresholds": {
+      "very_high": 0.9,
+      "high": 0.8,
+      "medium": 0.7,
+      "low": 0.6,
+      "very_low": 0.5
+    },
+    
+    "escalation_rules": {
+      "immediate_escalation": ["URGENT"],
+      "priority_escalation": ["ESCALATION"],
+      "standard_escalation": ["COMPLAINT"],
+      "low_priority": ["INSTRUCTION", "CASUAL"],
+      "escalation_timeout": {
+        "URGENT": 300,
+        "ESCALATION": 900,
+        "COMPLAINT": 1800,
+        "INSTRUCTION": 3600,
+        "CASUAL": 7200
+      }
+    },
+    
+    "business_hours": {
+      "weekdays": {
+        "start": "06:00",
+        "end": "22:00"
+      },
+      "weekends": {
+        "start": "07:00",
+        "end": "21:00"
+      },
+      "timezone": "Asia/Kolkata"
+    },
+    
+    "ai_model_settings": {
+      "primary_model": "advanced-categorizer",
+      "fallback_model": "basic-categorizer",
+      "confidence_boost": {
+        "multilingual_match": 0.1,
+        "business_context_match": 0.05,
+        "historical_pattern_match": 0.1
+      },
+      "uncertainty_handling": {
+        "threshold": 0.6,
+        "action": "human_review_required"
+      }
+    },
+    
+    "notification_settings": {
+      "urgent_notifications": {
+        "enabled": true,
+        "channels": ["whatsapp", "email", "sms"],
+        "recipients": ["management", "security", "facility_manager"]
+      },
+      "escalation_notifications": {
+        "enabled": true,
+        "channels": ["whatsapp", "email"],
+        "recipients": ["management", "customer_service_head"]
+      },
+      "performance_alerts": {
+        "enabled": true,
+        "thresholds": {
+          "accuracy_drop": 0.1,
+          "confidence_drop": 0.15,
+          "volume_spike": 2.0
+        }
+      }
+    },
+    
+    "analytics_config": {
+      "reporting_frequency": "daily",
+      "metrics_retention": 90,
+      "dashboard_refresh": 300,
+      "performance_tracking": true,
+      "trend_analysis": true,
+      "predictive_insights": true
+    }
+  }
+}

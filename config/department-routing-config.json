@@ -1,0 +1,425 @@
+{
+  "department_routing_config": {
+    "version": "2.0.0",
+    "last_updated": "2024-01-20",
+    "description": "Comprehensive department routing configuration for gym WhatsApp message management",
+    
+    "departments": {
+      "EQUIPMENT_MAINTENANCE": {
+        "name": "Equipment Maintenance",
+        "description": "Handles equipment-related issues, maintenance requests, and technical problems",
+        "priority_level": 3,
+        "response_time_sla": {
+          "urgent": 300,
+          "high": 900,
+          "medium": 1800,
+          "low": 3600
+        },
+        "capacity": {
+          "max_concurrent_issues": 15,
+          "daily_message_limit": 100,
+          "escalation_threshold": 12
+        },
+        "routing_rules": {
+          "primary_categories": ["INSTRUCTION", "COMPLAINT"],
+          "keywords": [
+            "treadmill", "dumbbell", "machine", "equipment", "weights", "cardio",
+            "broken", "not working", "maintenance", "repair", "fix",
+            "ट्रेडमिल", "डम्बल", "मशीन", "उपकरण", "वजन", "टूटा", "मरम्मत"
+          ],
+          "business_context": [
+            "equipment_malfunction", "maintenance_request", "technical_issue",
+            "safety_concern", "usage_guidance"
+          ]
+        },
+        "whatsapp_groups": [
+          {
+            "group_id": "equipment-maintenance-primary",
+            "group_name": "Equipment Maintenance Team",
+            "group_phone": "+91-XXXX-XXXXX1",
+            "is_primary": true,
+            "capacity": 10
+          },
+          {
+            "group_id": "equipment-maintenance-backup",
+            "group_name": "Equipment Backup Team",
+            "group_phone": "+91-XXXX-XXXXX2",
+            "is_primary": false,
+            "capacity": 5
+          }
+        ],
+        "escalation_chain": [
+          "FACILITY_MANAGEMENT",
+          "MANAGEMENT"
+        ],
+        "working_hours": {
+          "weekdays": {
+            "start": "06:00",
+            "end": "22:00"
+          },
+          "weekends": {
+            "start": "07:00",
+            "end": "21:00"
+          },
+          "after_hours_contact": "SECURITY"
+        }
+      },
+      
+      "FACILITY_MANAGEMENT": {
+        "name": "Facility Management",
+        "description": "Manages facility-related issues, cleanliness, infrastructure, and general maintenance",
+        "priority_level": 3,
+        "response_time_sla": {
+          "urgent": 600,
+          "high": 1200,
+          "medium": 2400,
+          "low": 4800
+        },
+        "capacity": {
+          "max_concurrent_issues": 20,
+          "daily_message_limit": 150,
+          "escalation_threshold": 18
+        },
+        "routing_rules": {
+          "primary_categories": ["INSTRUCTION", "COMPLAINT"],
+          "keywords": [
+            "facility", "building", "cleanliness", "dirty", "bathroom", "locker",
+            "air conditioning", "lighting", "parking", "reception", "entrance",
+            "सुविधा", "भवन", "सफाई", "गंदा", "बाथरूम", "लॉकर", "एयर कंडीशनिंग"
+          ],
+          "business_context": [
+            "facility_complaint", "cleanliness_issue", "infrastructure_problem",
+            "amenity_request", "accessibility_concern"
+          ]
+        },
+        "whatsapp_groups": [
+          {
+            "group_id": "facility-management-primary",
+            "group_name": "Facility Management Team",
+            "group_phone": "+91-XXXX-XXXXX3",
+            "is_primary": true,
+            "capacity": 15
+          },
+          {
+            "group_id": "facility-housekeeping",
+            "group_name": "Housekeeping Team",
+            "group_phone": "+91-XXXX-XXXXX4",
+            "is_primary": false,
+            "capacity": 8
+          }
+        ],
+        "escalation_chain": [
+          "MANAGEMENT"
+        ],
+        "working_hours": {
+          "weekdays": {
+            "start": "05:30",
+            "end": "23:00"
+          },
+          "weekends": {
+            "start": "06:00",
+            "end": "22:30"
+          },
+          "after_hours_contact": "SECURITY"
+        }
+      },
+      
+      "CUSTOMER_SERVICE": {
+        "name": "Customer Service",
+        "description": "Handles customer inquiries, membership issues, billing, and general support",
+        "priority_level": 2,
+        "response_time_sla": {
+          "urgent": 300,
+          "high": 600,
+          "medium": 1200,
+          "low": 2400
+        },
+        "capacity": {
+          "max_concurrent_issues": 30,
+          "daily_message_limit": 200,
+          "escalation_threshold": 25
+        },
+        "routing_rules": {
+          "primary_categories": ["COMPLAINT", "CASUAL", "INSTRUCTION"],
+          "keywords": [
+            "membership", "billing", "payment", "renewal", "registration", "fees",
+            "customer service", "help", "support", "inquiry", "question",
+            "सदस्यता", "बिलिंग", "भुगतान", "नवीनीकरण", "पंजीकरण", "फीस", "मदद"
+          ],
+          "business_context": [
+            "membership_inquiry", "billing_issue", "service_request",
+            "general_inquiry", "customer_feedback"
+          ]
+        },
+        "whatsapp_groups": [
+          {
+            "group_id": "customer-service-primary",
+            "group_name": "Customer Service Team",
+            "group_phone": "+91-XXXX-XXXXX5",
+            "is_primary": true,
+            "capacity": 20
+          },
+          {
+            "group_id": "customer-service-billing",
+            "group_name": "Billing Support Team",
+            "group_phone": "+91-XXXX-XXXXX6",
+            "is_primary": false,
+            "capacity": 10
+          },
+          {
+            "group_id": "customer-service-frontdesk",
+            "group_name": "Front Desk Team",
+            "group_phone": "+91-XXXX-XXXXX7",
+            "is_primary": false,
+            "capacity": 8
+          }
+        ],
+        "escalation_chain": [
+          "MANAGEMENT"
+        ],
+        "working_hours": {
+          "weekdays": {
+            "start": "06:00",
+            "end": "22:00"
+          },
+          "weekends": {
+            "start": "07:00",
+            "end": "21:00"
+          },
+          "after_hours_contact": "MANAGEMENT"
+        }
+      },
+      
+      "MANAGEMENT": {
+        "name": "Management",
+        "description": "Handles escalations, critical issues, policy matters, and high-priority customer concerns",
+        "priority_level": 1,
+        "response_time_sla": {
+          "urgent": 180,
+          "high": 300,
+          "medium": 600,
+          "low": 1200
+        },
+        "capacity": {
+          "max_concurrent_issues": 10,
+          "daily_message_limit": 50,
+          "escalation_threshold": 8
+        },
+        "routing_rules": {
+          "primary_categories": ["URGENT", "ESCALATION"],
+          "keywords": [
+            "manager", "management", "escalate", "serious", "legal", "refund",
+            "cancel membership", "complaint", "unacceptable", "frustrated",
+            "मैनेजर", "प्रबंधन", "गंभीर", "कानूनी", "रिफंड", "शिकायत"
+          ],
+          "business_context": [
+            "escalation_required", "management_decision", "policy_matter",
+            "customer_retention", "crisis_management"
+          ]
+        },
+        "whatsapp_groups": [
+          {
+            "group_id": "management-primary",
+            "group_name": "Management Team",
+            "group_phone": "+91-XXXX-XXXXX8",
+            "is_primary": true,
+            "capacity": 5
+          },
+          {
+            "group_id": "management-escalation",
+            "group_name": "Escalation Team",
+            "group_phone": "+91-XXXX-XXXXX9",
+            "is_primary": false,
+            "capacity": 3
+          }
+        ],
+        "escalation_chain": [],
+        "working_hours": {
+          "weekdays": {
+            "start": "08:00",
+            "end": "20:00"
+          },
+          "weekends": {
+            "start": "09:00",
+            "end": "18:00"
+          },
+          "after_hours_contact": "SECURITY",
+          "emergency_contact": "+91-XXXX-EMERGENCY"
+        }
+      },
+      
+      "SECURITY": {
+        "name": "Security",
+        "description": "Handles security concerns, emergency situations, and after-hours incidents",
+        "priority_level": 1,
+        "response_time_sla": {
+          "urgent": 60,
+          "high": 180,
+          "medium": 300,
+          "low": 600
+        },
+        "capacity": {
+          "max_concurrent_issues": 5,
+          "daily_message_limit": 30,
+          "escalation_threshold": 3
+        },
+        "routing_rules": {
+          "primary_categories": ["URGENT"],
+          "keywords": [
+            "emergency", "security", "theft", "harassment", "safety", "danger",
+            "fire", "accident", "injury", "police", "ambulance",
+            "आपातकाल", "सुरक्षा", "चोरी", "उत्पीड़न", "सुरक्षा", "खतरा"
+          ],
+          "business_context": [
+            "security_incident", "emergency_situation", "safety_concern",
+            "after_hours_issue", "crisis_response"
+          ]
+        },
+        "whatsapp_groups": [
+          {
+            "group_id": "security-team",
+            "group_name": "Security Team",
+            "group_phone": "+91-XXXX-SECURITY",
+            "is_primary": true,
+            "capacity": 3
+          }
+        ],
+        "escalation_chain": [
+          "MANAGEMENT"
+        ],
+        "working_hours": {
+          "weekdays": {
+            "start": "00:00",
+            "end": "23:59"
+          },
+          "weekends": {
+            "start": "00:00",
+            "end": "23:59"
+          },
+          "after_hours_contact": "SECURITY",
+          "emergency_contact": "+91-XXXX-EMERGENCY"
+        }
+      }
+    },
+    
+    "routing_strategies": {
+      "EMERGENCY_ROUTING": {
+        "description": "Immediate routing for urgent and critical situations",
+        "priority": 1,
+        "departments": ["SECURITY", "MANAGEMENT"],
+        "response_time": 60,
+        "parallel_routing": true,
+        "escalation_enabled": true
+      },
+      
+      "ESCALATION_ROUTING": {
+        "description": "Priority routing for frustrated customers and escalated issues",
+        "priority": 2,
+        "departments": ["MANAGEMENT", "CUSTOMER_SERVICE"],
+        "response_time": 300,
+        "escalation_enabled": true
+      },
+      
+      "PRIORITY_ROUTING": {
+        "description": "Standard priority routing for complaints and important issues",
+        "priority": 3,
+        "departments": ["CUSTOMER_SERVICE", "FACILITY_MANAGEMENT", "EQUIPMENT_MAINTENANCE"],
+        "response_time": 600,
+        "escalation_enabled": true
+      },
+      
+      "STANDARD_ROUTING": {
+        "description": "Regular routing for instructions and general inquiries",
+        "priority": 4,
+        "departments": ["EQUIPMENT_MAINTENANCE", "FACILITY_MANAGEMENT", "CUSTOMER_SERVICE"],
+        "response_time": 1800,
+        "escalation_enabled": false
+      },
+      
+      "CASUAL_ROUTING": {
+        "description": "Low priority routing for casual conversations",
+        "priority": 5,
+        "departments": ["CUSTOMER_SERVICE"],
+        "response_time": 3600,
+        "escalation_enabled": false
+      }
+    },
+    
+    "load_balancing": {
+      "enabled": true,
+      "algorithm": "weighted_round_robin",
+      "weights": {
+        "EQUIPMENT_MAINTENANCE": 3,
+        "FACILITY_MANAGEMENT": 4,
+        "CUSTOMER_SERVICE": 5,
+        "MANAGEMENT": 2,
+        "SECURITY": 1
+      },
+      "overflow_handling": {
+        "enabled": true,
+        "overflow_threshold": 0.8,
+        "overflow_actions": [
+          "route_to_backup_group",
+          "escalate_to_next_department",
+          "queue_for_next_available"
+        ]
+      }
+    },
+    
+    "performance_monitoring": {
+      "enabled": true,
+      "metrics_tracked": [
+        "response_time",
+        "resolution_rate",
+        "customer_satisfaction",
+        "escalation_rate",
+        "workload_distribution"
+      ],
+      "alert_thresholds": {
+        "response_time_breach": 1.5,
+        "escalation_rate_high": 0.15,
+        "satisfaction_low": 0.7,
+        "workload_imbalance": 0.3
+      },
+      "reporting_frequency": "daily"
+    },
+    
+    "business_rules": {
+      "auto_escalation": {
+        "enabled": true,
+        "conditions": [
+          {
+            "category": "URGENT",
+            "auto_escalate_after": 300
+          },
+          {
+            "category": "ESCALATION",
+            "auto_escalate_after": 900
+          },
+          {
+            "category": "COMPLAINT",
+            "auto_escalate_after": 3600,
+            "repetition_threshold": 3
+          }
+        ]
+      },
+      
+      "working_hours_routing": {
+        "enabled": true,
+        "after_hours_departments": ["SECURITY", "MANAGEMENT"],
+        "weekend_reduced_capacity": 0.7,
+        "holiday_routing": "SECURITY"
+      },
+      
+      "priority_customers": {
+        "enabled": true,
+        "vip_numbers": [
+          "+91-XXXX-VIP001",
+          "+91-XXXX-VIP002"
+        ],
+        "priority_routing": "MANAGEMENT",
+        "faster_response": 0.5
+      }
+    }
+  }
+}

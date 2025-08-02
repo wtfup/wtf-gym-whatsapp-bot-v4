@@ -82,8 +82,8 @@ ${colors.success}╔════════════════════
 log('SYSTEM', '🚀 Starting WTF WhatsApp Dashboard Development Environment...', colors.system);
 log('SYSTEM', `💻 Platform: ${os.platform()} ${os.arch()}`, colors.system);
 log('SYSTEM', `🔧 Node.js: ${process.version}`, colors.system);
-log('SYSTEM', '📡 Backend: http://localhost:3000', colors.system);
-log('SYSTEM', '🌐 Frontend: http://localhost:5174', colors.system);
+  log('SYSTEM', '📡 Backend: http://localhost:3010', colors.system);
+  log('SYSTEM', '🌐 Frontend: http://localhost:5010', colors.system);
 console.log();
 
 // Start both processes
@@ -123,8 +123,8 @@ setTimeout(() => {
 ${colors.success}╔══════════════════════════════════════════╗
 ║             🎉 SYSTEM READY!             ║
 ║                                          ║
-║  📡 Backend API: http://localhost:3000   ║
-║  🌐 Dashboard:   http://localhost:5174   ║
+║  📡 Backend API: http://localhost:3010   ║
+║  🌐 Dashboard:   http://localhost:5010   ║
 ║                                          ║
 ║  Press Ctrl+C to stop                    ║
 ╚══════════════════════════════════════════╝${colors.reset}
