@@ -1,259 +1,231 @@
-# 🚀 WTF WhatsApp Dashboard System
+# 🚀 WTF WhatsApp Dashboard v4
 
-A real-time WhatsApp Message Intelligence System with a beautiful dashboard, built using `whatsapp-web.js`, React, and Socket.IO.
+![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
+![Node.js](https://img.shields.io/badge/Node.js-v18%2B-green)
+![React](https://img.shields.io/badge/React-v19.1.0-blue)
+![WhatsApp](https://img.shields.io/badge/WhatsApp-Web.js-25D366)
+![AI](https://img.shields.io/badge/AI-Together%20AI-orange)
 
-## ✨ Features
+**Real-time WhatsApp Message Intelligence System with AI-powered Analysis**
 
-- 🔥 **Real-time WhatsApp Integration** using `whatsapp-web.js`
-- 💬 **Live Message Stream** with WebSocket connections
-- 📱 **QR Code Authentication** for WhatsApp Web
-- 🎨 **Beautiful Modern UI** with Tailwind CSS and dark mode
-- 📊 **Real-time Logs** displayed in browser console
-- 💾 **Message Persistence** with Prisma ORM (SQLite local, PostgreSQL prod)
-- 🚀 **Single Command Dev Setup** - no Docker needed locally
-- ☁️ **Fly.io Production Ready** with persistent storage
-- 📤 **Send Messages** directly from dashboard
+## ✨ Key Features
 
-## 🏗️ Architecture
+### 🤖 **AI-Powered Intelligence**
+- **Sentiment Analysis**: Automatic detection of positive/negative/neutral sentiment
+- **Intent Classification**: Categorizes messages (complaint/question/booking/general)
+- **Entity Extraction**: Identifies equipment, facilities, and staff mentions
+- **Auto-Flagging**: Critical message detection with confidence scoring
+- **Together AI Integration**: Powered by Qwen/Qwen2.5-7B-Instruct-Turbo
 
-```
-wtf-whatsapp-dashboard/
-├── backend/           # Node.js + Express + Socket.IO + WhatsApp
-├── frontend/          # React + Vite + Tailwind CSS
-├── shared/            # Shared types and utilities
-├── start-dev.js       # Unified development starter
-└── fly.prod.toml      # Fly.io deployment config
-```
+### 📱 **Real-time Dashboard**
+- **Material-UI Design**: Modern, responsive interface
+- **Live Message Feed**: Real-time WhatsApp message monitoring
+- **Socket.IO Integration**: Instant updates without page refresh
+- **Analytics Dashboard**: Message trends, sentiment distribution, flagged analytics
+- **QR Code Integration**: Built-in WhatsApp authentication
+
+### 🔧 **Technical Excellence**
+- **Single Command Setup**: `npm start` runs everything
+- **Persistent Sessions**: WhatsApp LocalAuth for permanent connection
+- **Database Flexibility**: SQLite (local) + PostgreSQL (production ready)
+- **Microservices Architecture**: Loosely coupled frontend/backend
+- **Production Ready**: Fly.io deployment configuration included
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-
-- Node.js 18+ 
+- Node.js v18+ 
 - npm or yarn
-- A WhatsApp account for QR authentication
+- Git
 
-### 1. Install Dependencies
+### Installation
 
 ```bash
-# Install root dependencies
-npm install
+# Clone the repository
+git clone https://github.com/wtfup/wtf-gym-whatsapp-bot-v4.git
+cd wtf-gym-whatsapp-bot-v4
 
-# Install all project dependencies
+# Install all dependencies
 npm run install-all
+
+# Start the system (backend + frontend)
+npm start
 ```
 
-### 2. Start Development Environment
+### 🎯 Access Points
+- **🌐 Dashboard**: http://localhost:5174
+- **📡 Backend API**: http://localhost:3000
+- **❤️ Health Check**: http://localhost:3000/health
 
-```bash
-# This starts both backend and frontend together
-npm run dev
+## 📦 Architecture
+
+### Backend (Node.js + Express)
+```
+backend/
+├── src/
+│   ├── index.js              # Main server
+│   ├── whatsapp.js          # WhatsApp client
+│   ├── ai-analysis-engine.js # AI processing
+│   ├── logger.js            # Centralized logging
+│   └── prisma/
+│       └── schema.prisma    # Database schema
+├── package.json
+└── .env.local               # Environment config
 ```
 
-This will:
-- Start backend server on `http://localhost:3000`
-- Start frontend dev server on `http://localhost:5173`
-- Set up real-time logging in both terminal and browser
-- Initialize WhatsApp client and generate QR code
-
-### 3. Connect WhatsApp
-
-1. Open `http://localhost:5173` in your browser
-2. Scan the QR code with your WhatsApp mobile app:
-   - WhatsApp → Menu → Linked Devices → Link a Device
-3. Once connected, you'll see real-time messages in the dashboard
-
-## 📱 Usage
-
-### Real-time Message Monitoring
-- All incoming and outgoing WhatsApp messages appear instantly
-- Messages show sender info, chat type (group/private), timestamps
-- Full message history is stored in database
-
-### Send Messages
-- Click "Send Message" button in dashboard
-- Enter phone number in format: `919876543210@c.us`
-- Type message and send directly through the interface
-
-### Live Logging
-- Click "Logs" button to see real-time system logs
-- All events (connections, messages, errors) are logged
-- Download logs as text file for debugging
-
-## ⚙️ Configuration
-
-### Environment Files
-
-**Backend** (`.env.local`):
-```env
-PORT=3000
-SESSION_PATH=./storage/session
-DATABASE_URL="file:./dev.db"
-NODE_ENV=development
-CORS_ORIGIN=http://localhost:5173
+### Frontend (React + Material-UI)
+```
+frontend/
+├── src/
+│   ├── App.js               # Main dashboard
+│   ├── components/          # UI components
+│   ├── config/
+│   │   └── environment.js   # Auto environment detection
+│   └── utils/
+├── package.json
+└── .env.development         # Frontend config
 ```
 
-**Frontend** (`.env.local`):
-```env
-VITE_SOCKET_SERVER=http://localhost:3000
-VITE_API_BASE_URL=http://localhost:3000
+## 🔧 Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm start` | **🚀 Single command** - Starts both backend & frontend |
+| `npm test` | Same as `npm start` |
+| `npm run dev` | Development mode with detailed logs |
+| `npm run backend` | Backend only |
+| `npm run frontend` | Frontend only |
+| `npm run install-all` | Install all dependencies |
+
+## 📊 Features in Detail
+
+### AI Analysis Engine
+- **Sentiment Detection**: Positive, Negative, Neutral classification
+- **Intent Recognition**: Complaint, Question, Booking, General
+- **Entity Extraction**: Equipment, Facilities, Staff mentions
+- **Confidence Scoring**: AI analysis reliability measurement
+- **Auto-Flagging**: Smart detection of critical messages
+
+### Real-time Dashboard
+- **Live Message Feed**: Instant WhatsApp message display
+- **Analytics Overview**: Message trends and statistics
+- **Flagged Messages**: Priority-based message management
+- **QR Authentication**: Built-in WhatsApp connection
+- **System Status**: Real-time connection monitoring
+
+### Database Schema
+```sql
+-- Core message storage with AI analysis
+Message {
+  id, messageId, fromNumber, fromName, toNumber
+  chatId, chatName, body, timestamp
+  sentiment, intent, entities, confidence
+  isFlagged, flagReason, flaggedAt
+  hasMedia, mediaUrl, mediaType
+}
+
+-- Flagged message management
+FlaggedMessage {
+  id, messageId, flagReason, category
+  priority, status, resolvedBy, resolvedAt
+}
+
+-- Automated routing configuration
+RoutingRule {
+  id, category, targetGroupId, conditions
+}
 ```
-
-### Database
-
-- **Local Development**: SQLite database (`dev.db`)
-- **Production**: PostgreSQL on Fly.io
-- **ORM**: Prisma with automatic migrations
 
 ## 🌐 Production Deployment
 
-### Fly.io Setup
-
-1. Install Fly CLI: `curl -L https://fly.io/install.sh | sh`
-
-2. Login: `fly auth login`
-
-3. Create App:
+### Fly.io Ready
 ```bash
-fly launch --config fly.prod.toml --no-deploy
-```
-
-4. Set Production Environment:
-```bash
-fly secrets set DATABASE_URL="postgresql://user:pass@host:5432/dbname"
-fly secrets set SESSION_PATH="./storage/session"
-fly secrets set NODE_ENV="production"
-```
-
-5. Create Persistent Volume:
-```bash
-fly volumes create whatsapp_sessions --region sin --size 1
-```
-
-6. Deploy:
-```bash
+# Deploy to production
 fly deploy
+
+# Set environment variables
+fly secrets set TOGETHER_API_KEY=your_api_key
+fly secrets set DATABASE_URL=your_postgres_url
 ```
 
-### Production Environment Variables
-
-Set these via `fly secrets set`:
-```env
-DATABASE_URL=postgresql://...
+### Environment Variables
+```bash
+# Backend (.env.local)
+PORT=3000
 SESSION_PATH=./storage/session
-NODE_ENV=production
-CORS_ORIGIN=https://your-app.fly.dev
+DATABASE_URL="file:./dev.db"
+CORS_ORIGIN=http://localhost:5174
+TOGETHER_API_KEY=your_api_key
+
+# Frontend (.env.development)
+REACT_APP_API_URL=http://localhost:3000
+REACT_APP_WEBSOCKET_URL=ws://localhost:3000
+PORT=5174
 ```
 
-## 🔧 Development
+## 🔍 API Endpoints
 
-### Project Structure
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | System health check |
+| `/api/status` | GET | WhatsApp connection status |
+| `/api/messages` | GET | Retrieve messages with filters |
+| `/api/flagged-messages` | GET | Get flagged messages |
+| `/api/analytics/overview` | GET | Analytics dashboard data |
+| `/api/whatsapp/qr` | GET | QR code for authentication |
+| `/api/send-message` | POST | Send WhatsApp message |
 
-```
-backend/src/
-├── index.js          # Main Express server
-├── whatsapp.js       # WhatsApp client logic
-├── logger.js         # Unified logging system
-└── prisma/           # Database schema
+## 🛠️ Tech Stack
 
-frontend/src/
-├── App.jsx           # Main React component
-├── hooks/            # Custom React hooks
-└── components/       # UI components
-```
+### Backend
+- **Node.js + Express**: Web server
+- **whatsapp-web.js**: WhatsApp Web API
+- **Socket.IO**: Real-time communication
+- **Prisma ORM**: Database management
+- **SQLite/PostgreSQL**: Data storage
+- **Together AI**: AI analysis engine
 
-### Available Scripts
+### Frontend  
+- **React 19**: UI framework
+- **Material-UI**: Component library
+- **Socket.IO Client**: Real-time updates
+- **Create React App**: Build system
+- **Axios**: HTTP client
 
-```bash
-# Development
-npm run dev              # Start both frontend and backend
-
-# Backend only
-cd backend && npm run dev
-
-# Frontend only  
-cd frontend && npm run dev
-
-# Database
-cd backend && npm run db:push    # Apply schema changes
-cd backend && npm run db:studio  # Open Prisma Studio
-```
-
-### Real-time Flow
-
-1. **WhatsApp** → `whatsapp.js` (message event)
-2. **Backend** → `Socket.IO` (emit to frontend)
-3. **Frontend** → React state (real-time UI update)
-4. **Database** → Prisma (message persistence)
-5. **Logs** → Terminal + Browser console
-
-## 🎨 UI Features
-
-- **Dark/Light Mode**: Automatic based on system preference
-- **Responsive Design**: Works on desktop, tablet, mobile
-- **Real-time Updates**: Messages and logs update instantly
-- **Beautiful Animations**: Smooth transitions and hover effects
-- **Status Indicators**: Connection status, WhatsApp auth status
-- **Message Filtering**: Group vs private message differentiation
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**1. WhatsApp Client Not Connecting**
-- Check if QR code is displayed
-- Ensure WhatsApp Web isn't already connected on another device
-- Try refreshing QR code
-
-**2. Messages Not Appearing**
-- Check browser console for WebSocket connection
-- Verify backend logs for message processing
-- Ensure database is properly connected
-
-**3. Development Server Issues**
-- Make sure ports 3000 and 5173 are available
-- Check if all dependencies are installed
-- Verify environment files are present
-
-### Debug Mode
-
-Enable detailed logging:
-```bash
-DEBUG=* npm run dev
-```
-
-## 📊 Future Features
-
-- 🤖 **AI Message Analysis** with sentiment detection
-- 🔔 **Smart Notifications** for important messages
-- 📈 **Analytics Dashboard** with message statistics
-- 🔄 **Message Routing** to different handlers
-- 🛡️ **Spam Detection** and filtering
-- 📋 **Message Templates** for quick replies
+### DevOps
+- **Fly.io**: Production deployment
+- **Git**: Version control
+- **npm**: Package management
+- **nodemon**: Development hot reload
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Submit a Pull Request
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## 📄 License
+## 📝 License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
+## 🙏 Acknowledgments
 
-If you encounter any issues:
+- **whatsapp-web.js** - WhatsApp Web API wrapper
+- **Together AI** - AI analysis capabilities
+- **Material-UI** - Beautiful React components
+- **Fly.io** - Production hosting platform
 
-1. Check the troubleshooting section above
-2. Review logs in browser and terminal
-3. Create an issue with detailed error information
-4. Include environment details and steps to reproduce
+## 📞 Support
+
+- 🐛 **Bug Reports**: [Issues](https://github.com/wtfup/wtf-gym-whatsapp-bot-v4/issues)
+- 💡 **Feature Requests**: [Issues](https://github.com/wtfup/wtf-gym-whatsapp-bot-v4/issues)
+- 📧 **Contact**: Create an issue for support
 
 ---
 
-**Made with ❤️ for the WTF community**
+**Built with ❤️ for modern WhatsApp business automation**
 
-*Real-time WhatsApp intelligence has never been this easy!* 
+[![Deploy on Fly.io](https://img.shields.io/badge/Deploy-Fly.io-purple)](https://fly.io/apps/new?image=wtf-whatsapp-dashboard)
+[![Star on GitHub](https://img.shields.io/github/stars/wtfup/wtf-gym-whatsapp-bot-v4?style=social)](https://github.com/wtfup/wtf-gym-whatsapp-bot-v4)
