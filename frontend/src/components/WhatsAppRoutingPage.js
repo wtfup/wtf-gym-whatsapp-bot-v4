@@ -88,6 +88,36 @@ const WhatsAppRoutingPage = () => {
 
   useEffect(() => {
     loadData();
+    
+    // 🔥 GLOBAL CSS FIX FOR DROPDOWNS
+    const addGlobalDropdownFix = () => {
+      const existingFix = document.getElementById('mui-dropdown-global-fix');
+      if (existingFix) existingFix.remove();
+      
+      const style = document.createElement('style');
+      style.id = 'mui-dropdown-global-fix';
+      style.textContent = `
+        /* Global Material-UI Dropdown Fix */
+        .MuiPaper-root.MuiMenu-paper,
+        .MuiPaper-root.MuiPopover-paper {
+          z-index: 999999 !important;
+          position: fixed !important;
+        }
+        
+        .MuiDialog-root .MuiSelect-select + .MuiPaper-root {
+          z-index: 999999 !important;
+          position: fixed !important;
+        }
+        
+        .MuiBackdrop-root {
+          z-index: 998999 !important;
+        }
+      `;
+      document.head.appendChild(style);
+      console.log('✅ Global dropdown fix applied!');
+    };
+    
+    addGlobalDropdownFix();
   }, []);
 
   const loadData = async () => {
@@ -99,9 +129,17 @@ const WhatsAppRoutingPage = () => {
         axios.get('/api/issue-categories')
       ]);
 
-      setWhatsappGroups(groupsRes.data.groups || []);
+      // Enhanced groups data with proper field mapping
+      const groups = groupsRes.data.groups || [];
+      console.log('🔍 Groups loaded:', groups.length, 'groups');
+      console.log('📊 First group data structure:', groups[0]);
+      
+      setWhatsappGroups(groups);
       setRoutingRules(rulesRes.data.rules || []);
-      setIssueCategories(categoriesRes.data.categories || []);
+      
+      // Fix categories data structure
+      const categories = Array.isArray(categoriesRes.data) ? categoriesRes.data : categoriesRes.data.categories || [];
+      setIssueCategories(categories);
     } catch (error) {
       console.error('Error loading data:', error);
       
@@ -733,7 +771,39 @@ const WhatsAppRoutingPage = () => {
       </Dialog>
 
       {/* Routing Rule Dialog */}
-      <Dialog open={dialogOpen && dialogType === 'routing-rule'} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={dialogOpen && dialogType === 'routing-rule'} 
+        onClose={() => setDialogOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        disableEnforceFocus={true}
+        disableAutoFocus={true}
+        disableRestoreFocus={true}
+        sx={{ 
+          zIndex: 9999,
+          '& .MuiDialog-paper': {
+            zIndex: 9999,
+            maxHeight: '90vh',
+            borderRadius: 3,
+            overflow: 'hidden'
+          }
+        }}
+        BackdropProps={{
+          sx: {
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 9998,
+            backdropFilter: 'blur(4px)'
+          }
+        }}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            maxHeight: '90vh',
+            zIndex: 9999,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }
+        }}
+      >
         <DialogTitle>{selectedItem ? 'Edit Routing Rule' : 'Create Routing Rule'}</DialogTitle>
         <DialogContent>
           <Box mt={2}>
@@ -742,6 +812,17 @@ const WhatsAppRoutingPage = () => {
               <Select
                 value={routingRule.categoryId}
                 onChange={(e) => setRoutingRule({ ...routingRule, categoryId: e.target.value })}
+                MenuProps={{
+                  disablePortal: false,
+                  container: document.body,
+                  PaperProps: {
+                    sx: {
+                      zIndex: 999999,
+                      maxHeight: 300,
+                      position: 'fixed !important'
+                    }
+                  }
+                }}
               >
                 {issueCategories.map((category) => (
                   <MenuItem key={category.id} value={category.id}>
@@ -756,10 +837,40 @@ const WhatsAppRoutingPage = () => {
               <Select
                 value={routingRule.whatsappGroupId}
                 onChange={(e) => setRoutingRule({ ...routingRule, whatsappGroupId: e.target.value })}
+                MenuProps={{
+                  disablePortal: false,
+                  container: document.body,
+                  anchorOrigin: {
+                    vertical: 'bottom',
+                    horizontal: 'left',
+                  },
+                  transformOrigin: {
+                    vertical: 'top',
+                    horizontal: 'left',
+                  },
+                  PaperProps: {
+                    sx: {
+                      zIndex: 999999, // MUCH higher than modal
+                      maxHeight: 300,
+                      position: 'fixed !important',
+                      backgroundColor: 'white',
+                      border: '1px solid #ccc',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
+                    }
+                  },
+                  slotProps: {
+                    paper: {
+                      sx: {
+                        zIndex: 999999,
+                        position: 'fixed !important'
+                      }
+                    }
+                  }
+                }}
               >
                 {whatsappGroups.map((group) => (
-                  <MenuItem key={group.id} value={group.id}>
-                    {group.name}
+                  <MenuItem key={group.id || group.group_id} value={group.id || group.group_id}>
+                    {group.name || group.group_name}
                   </MenuItem>
                 ))}
               </Select>
@@ -771,6 +882,17 @@ const WhatsAppRoutingPage = () => {
                 multiple
                 value={routingRule.severityFilter}
                 onChange={(e) => setRoutingRule({ ...routingRule, severityFilter: e.target.value })}
+                MenuProps={{
+                  disablePortal: false,
+                  container: document.body,
+                  PaperProps: {
+                    sx: {
+                      zIndex: 999999,
+                      maxHeight: 300,
+                      position: 'fixed !important'
+                    }
+                  }
+                }}
                 renderValue={(selected) => (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     {selected.map((value) => (
