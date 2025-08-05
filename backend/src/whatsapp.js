@@ -1,6 +1,7 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const path = require('path');
+const fs = require('fs'); // Added for file operations
 const logger = require('./logger');
 const { PrismaClient } = require('@prisma/client');
 const aiEngine = require('./ai-analysis-engine');
@@ -15,6 +16,7 @@ class WhatsAppClient {
     this.io = null;
     this.isReady = false;
     this.qrCode = null;
+    this.sessionPath = path.resolve(process.env.SESSION_PATH || './storage/session');
     
     // Initialize advanced AI systems
     this.aiPipeline = new MultiEngineAIPipeline();
@@ -30,13 +32,39 @@ class WhatsAppClient {
     try {
       logger.info('Initializing WhatsApp client...');
       
+      // FIXED: Ensure clean state before initialization
+      if (this.client) {
+        try {
+          await this.client.destroy();
+          logger.info('Previous client destroyed before reinitializing');
+        } catch (e) {
+          logger.warn('Error destroying previous client:', e.message);
+        }
+      }
+      
+      // Reset state
+      this.client = null;
+      this.isReady = false;
+      this.qrCode = null;
+      
+      // Wait a bit for cleanup to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       this.client = new Client({
         authStrategy: new LocalAuth({
-          dataPath: path.resolve(process.env.SESSION_PATH)
+          dataPath: this.sessionPath
         }),
         puppeteer: {
-          headless: true,  // Always headless - no separate browser window
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security']
+          headless: true,
+          args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-web-security',
+            '--disable-dev-shm-usage',
+            '--no-first-run',
+            '--disable-gpu',
+            '--disable-extensions'
+          ]
         }
       });
 
@@ -47,6 +75,18 @@ class WhatsAppClient {
       
     } catch (error) {
       logger.error('Failed to initialize WhatsApp client', error);
+      
+      // ENHANCED: Better error recovery
+      this.client = null;
+      this.isReady = false;
+      this.qrCode = null;
+      
+      // Emit error status to frontend
+      this.emitToFrontend('initialization_error', {
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+      
       throw error;
     }
   }
@@ -85,6 +125,7 @@ class WhatsAppClient {
       logger.success(`WhatsApp client ready! Logged in as: ${clientInfo.pushname} (${clientInfo.wid.user})`);
       
       // Initialize routing engine with WhatsApp client
+      const WhatsAppRoutingEngine = require('./whatsapp-routing-engine');
       this.routingEngine = new WhatsAppRoutingEngine(this.client);
       logger.info('🔄 Advanced routing engine initialized');
       
@@ -96,6 +137,18 @@ class WhatsAppClient {
 
       // FIXED: Emit WhatsApp status when ready
       this.emitWhatsAppStatus();
+
+      // 🔥 TRIGGER DATA MANAGER SYNC (FIX FOR ACCOUNT SWITCHING)
+      const dataManager = require('./whatsapp-data-manager');
+      dataManager.cache.isConnected = true;
+      await dataManager.syncAllData().catch(error => {
+        logger.error('Error syncing Data Manager:', error);
+      });
+
+      // AUTO-SYNC NEW ACCOUNT'S DATA
+      await this.syncNewAccountData().catch(error => {
+        logger.error('Error syncing new account data:', error);
+      });
 
       // Get recent chats and contacts
       await this.syncChatsAndContacts();
@@ -151,7 +204,24 @@ class WhatsAppClient {
       await this.processAIAnalysis(messageData);
 
       // Save to database AFTER AI analysis to include AI results
-      await this.saveMessage(messageData);
+      const savedMessage = await this.saveMessage(messageData);
+
+      // ROUTE MESSAGE using the routing engine if available
+      if (this.routingEngine && savedMessage && messageData.aiAnalysisResult) {
+        try {
+          const routingResult = await this.routingEngine.routeMessage(
+            messageData, 
+            messageData.aiAnalysisResult,
+            null // contextual analysis - can be added later
+          );
+          
+          if (routingResult && routingResult.success) {
+            logger.info(`📋 MESSAGE ROUTED: Message successfully routed to ${routingResult.routed_groups.length} group(s)`);
+          }
+        } catch (routingError) {
+          logger.error('❌ ROUTING ERROR: Failed to route message:', routingError);
+        }
+      }
 
       // Emit to frontend with mapped field names
       this.emitToFrontend('message', {
@@ -446,6 +516,8 @@ class WhatsAppClient {
       // Execute intelligent routing for all messages (not just flagged ones)
       if (this.routingEngine && finalDecision.advanced_category !== 'CASUAL') {
         try {
+          // FIXED: Re-enabled WhatsApp routing functionality
+          logger.info('🔄 ROUTING: Executing intelligent routing...');
           await this.executeIntelligentRouting(messageData, finalDecision, pipelineResult);
         } catch (routingError) {
           logger.warning('🔄 ROUTING: Failed to route message, continuing without routing');
@@ -505,7 +577,7 @@ class WhatsAppClient {
     try {
       logger.warning(`🚨 ADVANCED FLAGGING: ${messageData.advanced_category} - ${this.generateFlagReason(finalDecision)}`);
 
-      // Save to flagged_messages table with enhanced data
+      // Save to flagged_messages table - FIXED: Only use schema fields
       await prisma.flaggedMessage.create({
         data: {
           messageId: messageData.id,
@@ -515,17 +587,14 @@ class WhatsAppClient {
           chatName: messageData.chatName,
           body: messageData.body,
           timestamp: messageData.timestamp,
-          messageType: messageData.messageType,
-          isGroup: messageData.isGroup,
-          flagReason: messageData.flagReason,
+          flagReason: this.generateFlagReason(finalDecision),
           category: finalDecision.advanced_category,
-          priority: this.getCategoryPriority(finalDecision.advanced_category),
+          priority: this.getCategoryPriorityString(finalDecision.advanced_category),
           status: 'pending',
-          // NEW: Advanced fields
-          escalationScore: finalDecision.escalation_score,
-          businessContext: messageData.business_context,
-          repetitionCount: messageData.repetition_count || 0,
-          confidence: messageData.confidence
+          // AI Analysis fields that exist in schema
+          sentiment: finalDecision.sentiment,
+          intent: finalDecision.intent,
+          confidence: finalDecision.confidence || messageData.confidence
         }
       });
 
@@ -681,6 +750,20 @@ class WhatsAppClient {
   }
 
   /**
+   * Get category priority as string for Prisma schema
+   */
+  getCategoryPriorityString(category) {
+    const priorities = {
+      URGENT: 'critical',
+      ESCALATION: 'high',
+      COMPLAINT: 'medium',
+      INSTRUCTION: 'low',
+      CASUAL: 'low'
+    };
+    return priorities[category] || 'medium';
+  }
+
+  /**
    * Map legacy analysis to advanced category
    */
   mapLegacyToAdvancedCategory(analysis) {
@@ -824,6 +907,64 @@ ${analysis.flagging.flagReasons.map(reason => `• ${reason}`).join('\n')}
 *Auto-generated by WTF WhatsApp AI System*`;
   }
 
+  /**
+   * Auto-sync new WhatsApp account's groups and data
+   * This runs when a new account logs in to populate fresh data
+   */
+  async syncNewAccountData() {
+    try {
+      logger.info('🔄 AUTO-SYNC: Starting new account data synchronization...');
+      
+      // Get fresh groups from WhatsApp
+      const chats = await this.client.getChats();
+      const groups = chats.filter(chat => chat.isGroup);
+      
+      logger.info(`📱 Found ${groups.length} WhatsApp groups for new account`);
+      
+      // Sync each group to database
+      for (const group of groups) {
+        try {
+          await prisma.whatsAppGroup.upsert({
+            where: { group_id: group.id._serialized },
+            update: {
+              group_name: group.name,
+              is_active: true,
+              updated_at: new Date()
+            },
+            create: {
+              group_id: group.id._serialized,
+              group_name: group.name,
+              department: 'UNASSIGNED', // Default department
+              priority_level: 3, // Default priority
+              is_active: true,
+              description: `Auto-synced group: ${group.name}`
+            }
+          });
+          
+          logger.info(`✅ Synced group: ${group.name}`);
+        } catch (error) {
+          logger.error(`❌ Error syncing group ${group.name}:`, error.message);
+        }
+      }
+      
+      // Emit update to frontend so it refreshes data
+      this.emitToFrontend('groups_synced', {
+        groupCount: groups.length,
+        message: `Synced ${groups.length} groups from new account`,
+        timestamp: new Date().toISOString()
+      });
+      
+      logger.success(`🎉 AUTO-SYNC: Successfully synced ${groups.length} groups for new account`);
+      
+    } catch (error) {
+      logger.error('❌ AUTO-SYNC ERROR:', error);
+      this.emitToFrontend('sync_error', {
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
   async syncChatsAndContacts() {
     try {
       logger.info('Syncing chats and contacts...');
@@ -914,6 +1055,195 @@ ${analysis.flagging.flagReasons.map(reason => `• ${reason}`).join('\n')}
     if (this.client) {
       await this.client.destroy();
       logger.info('WhatsApp client destroyed');
+    }
+  }
+
+  /**
+   * Force logout: Destroys client and clears all session files
+   * This is used when we need a complete clean slate
+   */
+  async forceDestroy() {
+    try {
+      logger.info('🚨 FORCE LOGOUT: Starting complete session cleanup...');
+      
+      // Step 1: Destroy the WhatsApp client
+      if (this.client) {
+        try {
+          await this.client.destroy();
+          logger.info('✅ WhatsApp client destroyed');
+        } catch (error) {
+          logger.warn('⚠️ Error destroying client (continuing anyway):', error.message);
+        }
+      }
+      
+      // Step 2: Reset internal state
+      this.client = null;
+      this.isReady = false;
+      this.qrCode = null;
+      
+      // Step 3: CLEAR DATABASE DATA FROM OLD ACCOUNT
+      await this.clearOldAccountData();
+      
+      // Step 4: Force clear session files (even if locked)
+      await this.clearSessionFiles();
+      
+      // Step 5: Emit status update
+      this.emitToFrontend('force_logout_complete', {
+        success: true,
+        message: 'Force logout completed successfully',
+        timestamp: new Date().toISOString()
+      });
+      
+      logger.success('🎉 FORCE LOGOUT: Complete session cleanup successful');
+      
+      // Step 6: Auto-reinitialize after a longer delay for better cleanup
+      setTimeout(() => {
+        logger.info('🔄 Starting auto-reinitialize after force logout...');
+        this.initialize().catch(error => {
+          logger.error('Error reinitializing after force logout:', error);
+          // Emit error to frontend
+          this.emitToFrontend('reinitialize_error', {
+            error: error.message,
+            timestamp: new Date().toISOString()
+          });
+        });
+      }, 3000);
+      
+      return { success: true, message: 'Force logout completed successfully' };
+      
+    } catch (error) {
+      logger.error('🚨 FORCE LOGOUT ERROR:', error);
+      this.emitToFrontend('force_logout_error', {
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Clear all database data from the old WhatsApp account
+   * This ensures fresh data when new account logs in
+   */
+  async clearOldAccountData() {
+    try {
+      logger.info('🗑️ Clearing ALL old account data from database...');
+      
+      // Clear messages (THIS WAS THE MAIN MISSING PIECE!)
+      const deletedMessages = await prisma.message.deleteMany({});
+      logger.info(`✅ Cleared ${deletedMessages.count} messages from old account`);
+      
+      // Clear flagged messages 
+      const deletedFlaggedMessages = await prisma.flaggedMessage?.deleteMany({}) || { count: 0 };
+      logger.info(`✅ Cleared ${deletedFlaggedMessages.count} flagged messages from old account`);
+      
+      // Clear WhatsApp groups from old account
+      const deletedGroups = await prisma.whatsAppGroup.deleteMany({});
+      logger.info(`✅ Cleared ${deletedGroups.count} WhatsApp groups from database`);
+      
+      // Clear routing rules (they're tied to old account's groups)
+      const deletedRules = await prisma.routingRule.deleteMany({});
+      logger.info(`✅ Cleared ${deletedRules.count} routing rules from database`);
+      
+      // Clear routing logs (all routing history from old account)
+      const deletedLogs = await prisma.messageRoutingLog.deleteMany({});
+      logger.info(`✅ Cleared ${deletedLogs.count} routing logs from database`);
+      
+      // Clear any cached chat data from old account  
+      const deletedChats = await prisma.chat.deleteMany({});
+      logger.info(`✅ Cleared ${deletedChats.count} cached chats from database`);
+      
+      // Clear contacts from old account
+      const deletedContacts = await prisma.contact?.deleteMany({}) || { count: 0 };
+      logger.info(`✅ Cleared ${deletedContacts.count} contacts from database`);
+      
+      // Clear contextual analysis data from old account
+      const deletedContextual = await prisma.contextualAnalysis?.deleteMany({}) || { count: 0 };
+      logger.info(`✅ Cleared ${deletedContextual.count} contextual analysis records from database`);
+      
+      // Clear AI analysis performance data from old account
+      const deletedAiPerformance = await prisma.aIAnalysisPerformance?.deleteMany({}) || { count: 0 };
+      logger.info(`✅ Cleared ${deletedAiPerformance.count} AI performance records from database`);
+      
+      // Clear AI insights data from old account
+      const deletedAiInsights = await prisma.aIInsight?.deleteMany({}) || { count: 0 };
+      logger.info(`✅ Cleared ${deletedAiInsights.count} AI insights from database`);
+      
+      // 🔥 CLEAR DATA MANAGER CACHE (NEW!)
+      const dataManager = require('./whatsapp-data-manager');
+      dataManager.clearCache();
+      logger.info('✅ Cleared WhatsApp Data Manager cache');
+      
+      logger.success(`🎉 OLD ACCOUNT DATA COMPLETELY CLEARED:
+        📧 Messages: ${deletedMessages.count}
+        🚩 Flagged Messages: ${deletedFlaggedMessages.count}
+        👥 Groups: ${deletedGroups.count}
+        📋 Routing Rules: ${deletedRules.count}
+        📊 Routing Logs: ${deletedLogs.count}
+        💬 Chats: ${deletedChats.count}
+        📞 Contacts: ${deletedContacts.count}
+        🧠 Contextual Analysis: ${deletedContextual.count}
+        🤖 AI Performance: ${deletedAiPerformance.count}
+        💡 AI Insights: ${deletedAiInsights.count}`);
+      
+      // Emit complete clear notification to frontend
+      this.emitToFrontend('old_account_data_cleared', {
+        success: true,
+        totalCleared: {
+          messages: deletedMessages.count,
+          flaggedMessages: deletedFlaggedMessages.count,
+          groups: deletedGroups.count,
+          rules: deletedRules.count,
+          logs: deletedLogs.count,
+          chats: deletedChats.count,
+          contacts: deletedContacts.count,
+          contextual: deletedContextual.count,
+          aiPerformance: deletedAiPerformance.count,
+          aiInsights: deletedAiInsights.count
+        },
+        message: 'All old account data has been completely cleared',
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      logger.error('❌ Error clearing old account data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Forcefully clear all session files and directories
+   */
+  async clearSessionFiles() {
+    try {
+      logger.info('🧹 Clearing session files...');
+      
+      if (fs.existsSync(this.sessionPath)) {
+        // Use rmSync with force option to remove even locked files
+        fs.rmSync(this.sessionPath, { 
+          recursive: true, 
+          force: true,
+          maxRetries: 3,
+          retryDelay: 1000
+        });
+        logger.info('✅ Session directory removed');
+      }
+      
+      // Recreate the session directory
+      fs.mkdirSync(this.sessionPath, { recursive: true });
+      logger.info('✅ Clean session directory created');
+      
+      // Also clear any .wwebjs_cache directories
+      const cacheDir = path.join(__dirname, '..', '.wwebjs_cache');
+      if (fs.existsSync(cacheDir)) {
+        fs.rmSync(cacheDir, { recursive: true, force: true });
+        logger.info('✅ WhatsApp cache cleared');
+      }
+      
+    } catch (error) {
+      logger.error('Error clearing session files:', error);
+      throw new Error(`Failed to clear session files: ${error.message}`);
     }
   }
 }

@@ -18,12 +18,12 @@ export const LOG_LEVELS = {
 
 // Default configuration
 const DEFAULT_CONFIG = {
-  endpoint: '/api/frontend-log',
+  endpoint: 'http://localhost:3010/api/frontend-log',
   batchSize: 10,
   flushInterval: 5000, // 5 seconds
   maxRetries: 3,
   retryDelay: 1000,
-  enabled: true
+  enabled: false // Temporarily disabled to prevent 404 errors
 };
 
 // Log queue for batching

@@ -24,11 +24,38 @@ backend/dev.db-*
 backend/*.db
 backend/*.db-*
 
-# Session storage
+# ===========================================
+# ENHANCED: Complete Session & Data Isolation
+# ===========================================
+
+# WhatsApp Session Data (NEVER commit)
 backend/storage/
 backend/session/
 backend/.wwebjs_auth/
 backend/.wwebjs_cache/
+storage/
+session/
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Database Files (Environment-specific)
+backend/prisma/dev.db*
+backend/prisma/*.db*
+backend/*.db*
+*.db
+*.db-journal
+
+# Puppeteer Session Data
+**/Default/
+**/Crashpad/
+**/IndexedDB/
+**/Local Storage/
+**/Session Storage/
+**/Service Worker/
+**/WebStorage/
+**/chrome_debug.log
+**/Cookies*
+**/DevToolsActivePort
 
 # Logs
 logs/

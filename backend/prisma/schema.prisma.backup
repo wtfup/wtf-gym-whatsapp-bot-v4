@@ -1,0 +1,292 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  messageId   String   @unique
+  fromNumber  String
+  fromName    String?
+  toNumber    String?
+  chatId      String
+  chatName    String?
+  body        String
+  timestamp   DateTime
+  messageType String   @default("text")
+  isGroup     Boolean  @default(false)
+  isFromMe    Boolean  @default(false)
+  hasMedia    Boolean  @default(false)
+  
+  // AI Analysis Fields
+  sentiment   String?  // positive|negative|neutral
+  intent      String?  // complaint|question|booking|general
+  entities    String?  // JSON string of extracted entities
+  confidence  Float?   // AI analysis confidence score
+  
+  // Advanced Categorization Fields
+  advanced_category String?  // INSTRUCTION|ESCALATION|COMPLAINT|URGENT|CASUAL
+  business_context  String?  // JSON string of gym-specific context data
+  repetition_count  Int      @default(0) // Number of times similar message repeated
+  escalation_score  Float    @default(0.0) // Risk score for escalation (0.0-1.0)
+  
+  // Flagging System
+  isFlagged   Boolean  @default(false)
+  flagReason  String?  // Auto-flagging reason
+  flaggedAt   DateTime?
+  
+  // Media Handling
+  mediaUrl      String?  // Media file URL
+  mediaType     String?  // image|video|audio|document
+  mediaFilename String?  // Original filename
+  mediaSize     Int?     // File size in bytes
+  mimeType      String?  // MIME type (image/jpeg, video/mp4, etc.)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("messages")
+  @@index([advanced_category])
+  @@index([escalation_score])
+  @@index([fromNumber, timestamp])
+  @@index([chatId, timestamp])
+  @@index([isFlagged, timestamp])
+  @@index([sentiment, timestamp])
+  @@index([intent, timestamp])
+  @@index([repetition_count])
+  @@index([timestamp, advanced_category])
+  @@index([business_context]) // For JSON queries if needed
+}
+
+model WhatsAppGroup {
+  id               Int      @id @default(autoincrement())
+  group_id         String   @unique // WhatsApp group ID
+  group_name       String   // Display name of the group
+  department       String   // EQUIPMENT_MAINTENANCE, FACILITY_MANAGEMENT, CUSTOMER_SERVICE, MANAGEMENT
+  priority_level   Int      @default(3) // 1=highest, 5=lowest
+  response_time_kpi Int?    // Response time KPI in minutes
+  is_active        Boolean  @default(true)
+  description      String?  // Optional description of group purpose
+  contact_person   String?  // Main contact person for this group
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  // Relations
+  routing_rules    RoutingRule[]
+  routing_logs     MessageRoutingLog[]
+
+  @@map("whatsapp_groups")
+  @@index([department])
+  @@index([is_active, priority_level])
+}
+
+model IssueCategory {
+  id                    Int      @id @default(autoincrement())
+  category_name         String   @unique // Equipment Breakdown, AC/HVAC Issues, etc.
+  department            String   // EQUIPMENT_MAINTENANCE, FACILITY_MANAGEMENT, etc.
+  keywords              String   // JSON array of keywords ["broken", "not working", etc.]
+  priority_weight       Int      @default(3) // 1=highest priority, 5=lowest
+  auto_route            Boolean  @default(true) // Should auto-route messages
+  escalation_threshold  Int      @default(3) // Number of repetitions before escalation
+  business_context      String?  // Additional gym-specific context
+  color_code           String?   // Hex color for UI display (#FF5722)
+  icon_name            String?   // Material-UI icon name
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  // Relations
+  routing_rules        RoutingRule[]
+
+  @@map("issue_categories")
+  @@index([department])
+  @@index([auto_route])
+  @@index([priority_weight])
+}
+
+model RoutingRule {
+  id                    Int            @id @default(autoincrement())
+  rule_name             String         // Descriptive name for the rule
+  category_id           Int?           // Optional: Link to specific issue category
+  whatsapp_group_id     Int            // Target WhatsApp group
+  condition_logic       String         // JSON: Complex routing conditions
+  severity_filter       String         // JSON: Which severities to route ["high", "critical"]
+  advanced_category     String?        // INSTRUCTION|ESCALATION|COMPLAINT|URGENT|CASUAL
+  priority              Int            @default(5) // Rule priority (1=highest)
+  is_active             Boolean        @default(true)
+  success_rate          Float          @default(0.0) // Routing success percentage
+  total_routed          Int            @default(0) // Total messages routed by this rule
+  successful_routes     Int            @default(0) // Successful routing count
+  escalation_enabled    Boolean        @default(false) // Enable escalation for this rule
+  escalation_timeout    Int?           // Minutes before escalation
+  created_at            DateTime       @default(now())
+  updated_at            DateTime       @updatedAt
+
+  // Relations
+  issue_category        IssueCategory? @relation(fields: [category_id], references: [id])
+  whatsapp_group        WhatsAppGroup  @relation(fields: [whatsapp_group_id], references: [id])
+  routing_logs          MessageRoutingLog[]
+
+  @@map("routing_rules")
+  @@index([is_active, priority])
+  @@index([advanced_category])
+  @@index([category_id])
+  @@index([whatsapp_group_id])
+  @@index([success_rate])
+}
+
+model MessageRoutingLog {
+  id                    Int         @id @default(autoincrement())
+  message_id            String      // Reference to the original message
+  routing_rule_id       Int         // Which rule was used for routing
+  target_group_id       Int         // Which WhatsApp group received the message
+  routed_at             DateTime    @default(now())
+  routing_success       Boolean     @default(false)
+  response_time         Int?        // Response time in minutes
+  escalated             Boolean     @default(false)
+  escalated_at          DateTime?   // When was it escalated
+  resolution_status     String      @default("pending") // pending|acknowledged|resolved|closed
+  resolved_at           DateTime?   // When was it resolved
+  resolved_by           String?     // Who resolved it
+  notes                 String?     // Additional notes
+  error_message         String?     // Error if routing failed
+  retry_count          Int         @default(0) // Number of retry attempts
+  metadata             String?     // Additional JSON metadata
+
+  // Relations  
+  routing_rule         RoutingRule @relation(fields: [routing_rule_id], references: [id])
+  target_group         WhatsAppGroup @relation(fields: [target_group_id], references: [id])
+
+  @@map("message_routing_log")
+  @@index([routing_success, routed_at])
+  @@index([resolution_status])
+  @@index([escalated])
+  @@index([target_group_id, routed_at])
+}
+
+model ContextualAnalysis {
+  id                    Int      @id @default(autoincrement())
+  sender_number         String   // WhatsApp number of sender
+  chat_id               String   // Chat/group ID
+  message_id            String   // Reference to specific message
+  repetition_pattern    String?  // JSON: Pattern of repeated messages
+  sentiment_trend       String?  // JSON: Sentiment trend over time
+  escalation_indicators String?  // JSON: Detected escalation signs
+  business_context      String?  // JSON: Gym-specific context analysis
+  analysis_confidence   Float    @default(0.0) // Confidence of contextual analysis
+  pattern_type          String?  // instruction_repetition|sentiment_decline|escalation_pattern
+  risk_score           Float    @default(0.0) // Overall risk score (0.0-1.0)
+  recommended_action   String?  // escalate|monitor|ignore|priority_route
+  historical_context  String?  // JSON: Related historical message data
+  created_at           DateTime @default(now())
+
+  @@map("contextual_analysis")
+  @@index([sender_number, created_at])
+  @@index([chat_id, created_at])
+  @@index([risk_score])
+}
+
+model AIAnalysisPerformance {
+  id                    Int      @id @default(autoincrement())
+  message_id            String   // Reference to the original message
+  primary_ai_result     String?  // JSON: Primary AI engine result
+  contextual_result     String?  // JSON: Contextual analysis result  
+  fallback_result       String?  // JSON: Fallback analysis result
+  final_decision        String   // JSON: Final categorization decision
+  processing_time       Int      // Processing time in milliseconds
+  confidence_score      Float    @default(0.0) // Overall confidence (0.0-1.0)
+  accuracy_score        Float?   // Accuracy if human feedback available
+  human_feedback        String?  // correct|incorrect|partial|pending
+  feedback_notes        String?  // Additional feedback notes
+  model_version         String?  // AI model version used
+  prompt_version        String?  // Prompt version used
+  category_accuracy     String?  // JSON: Per-category accuracy data
+  error_type            String?  // categorization|sentiment|intent|flagging
+  improvement_suggestion String? // Suggestions for improvement
+  created_at            DateTime @default(now())
+
+  @@map("ai_analysis_performance")
+  @@index([human_feedback])
+  @@index([confidence_score])
+  @@index([accuracy_score])
+  @@index([created_at])
+}
+
+model FlaggedMessage {
+  id          String   @id @default(cuid())
+  messageId   String   @unique
+  fromNumber  String
+  fromName    String?
+  chatId      String
+  chatName    String?
+  body        String
+  timestamp   DateTime
+  
+  // Flagging Details
+  flagReason  String
+  category    String   // complaint|urgent|equipment|staff
+  priority    String   @default("medium") // low|medium|high|critical
+  status      String   @default("pending") // pending|reviewed|resolved
+  
+  // AI Analysis
+  sentiment   String?
+  intent      String?
+  confidence  Float?
+  
+  // Resolution
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  notes       String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("flagged_messages")
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  number      String   @unique
+  name        String?
+  isGroup     Boolean  @default(false)
+  profilePic  String?
+  lastSeen    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("contacts")
+}
+
+model Chat {
+  id          String   @id @default(cuid())
+  chatId      String   @unique
+  name        String?
+  isGroup     Boolean  @default(false)
+  isArchived  Boolean  @default(false)
+  isMuted     Boolean  @default(false)
+  lastMessage String?
+  lastMessageTime DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("chats")
+}
+
+
+
+model SystemConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_config")
+} 

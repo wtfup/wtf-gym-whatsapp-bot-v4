@@ -6,7 +6,7 @@ import {
   Tabs, Tab, FormControl, Select, MenuItem, 
   InputBase, Chip, Card, CardContent, Collapse, Switch, FormControlLabel, Pagination, Tooltip,
   Badge, Fab, Table, TableHead, TableBody, TableRow, TableCell, Grid, TextField,
-  Alert, Skeleton
+  Alert, Skeleton, Dialog, DialogTitle, DialogContent, DialogActions
 } from "@mui/material";
 import {
   Dashboard as DashboardIcon,
@@ -74,6 +74,9 @@ import KeywordReviewPage from './components/KeywordReviewPage';
 import IssueCategoriesPage from './components/IssueCategoriesPage';
 import ComprehensiveAnalyticsDashboard from './components/ComprehensiveAnalyticsDashboard';
 import WhatsAppRoutingPage from './components/WhatsAppRoutingPage';
+import WhatsAppRoutingPageV2 from './components/WhatsAppRoutingPageV2';
+import WhatsAppGroupsV2 from './components/WhatsAppGroupsV2';
+import DialogTestV3 from './components/DialogTestV3';
 import AIConfidenceManagement from './components/AIConfidenceManagement';
 import DynamicCategoriesPage from './components/DynamicCategoriesPage';
 import AIDashboardPage from './components/AIDashboardPage';
@@ -139,6 +142,8 @@ const NAV_ITEMS = [
   { label: "Daily/Weekly Digest", key: "digest", icon: <AssessmentIcon /> },
   { label: "Slack Integration", key: "slack", icon: <NotificationsIcon /> },
   { label: "WhatsApp Routing", key: "whatsapp_routing", icon: <SettingsInputAntennaIcon /> },
+  { label: "🆕 WhatsApp Groups V2", key: "whatsapp_groups_v2", icon: <SettingsInputAntennaIcon /> },
+  { label: "🧪 Dialog Test V3", key: "dialog_test_v3", icon: <SettingsInputAntennaIcon /> },
   { label: "AI Confidence Management", key: "ai_confidence", icon: <SecurityIcon /> },
   { label: "Dynamic Categories", key: "dynamic_categories", icon: <AutoAwesomeIcon /> },
   { label: "Issue Management", key: "issue_management", icon: <ManageAccountsIcon /> },
@@ -1818,11 +1823,13 @@ export default function App() {
     }
     
     try {
-      let url = currentTab === "logs" ? "/api/messages" : "/api/flagged-messages";
+      let endpoint = currentTab === "logs" ? "/api/messages" : "/api/flagged-messages";
       let params = [];
       
       // Add pagination parameters
-      const offset = customOffset !== null ? customOffset : (loadMore ? allLogs.length : 0);
+      // 🔥 FIX: Use correct array length for offset calculation based on current tab
+      const currentArrayLength = currentTab === "logs" ? allLogs.length : allFlags.length;
+      const offset = customOffset !== null ? customOffset : (loadMore ? currentArrayLength : 0);
       params.push(`offset=${offset}`);
       params.push(`limit=${ITEMS_PER_PAGE}`);
       
@@ -1831,9 +1838,9 @@ export default function App() {
       if (senderFilter) params.push(`sender=${encodeURIComponent(senderFilter)}`);
       if (search) params.push(`q=${encodeURIComponent(search)}`);
       
-      if (params.length) url += "?" + params.join("&");
+      if (params.length) endpoint += "?" + params.join("&");
       
-      const res = await fetch(url);
+      const res = await fetch(apiUrl(endpoint));
       const data = await res.json();
       
       if (currentTab === "logs") {
@@ -2459,11 +2466,24 @@ export default function App() {
       setCurrentTab("flags");
     }
 
-    // Auto-save memory when navigating to a new page (but not on initial load)
-    if (previousView && previousView !== newView) {
-      savePageMemory(previousView, newView);
+      // Auto-save memory when navigating to a new page (but not on initial load)
+  if (previousView && previousView !== newView) {
+    savePageMemory(previousView, newView);
+  }
+
+  // FIXED: Auto-load data for specific pages  
+  if (newView === "flagged" && previousView !== newView) {
+    console.log('📊 Navigated to flagged page - will load data when currentTab updates');
+  }
+}, [location.pathname, currentView, savePageMemory, fetchData]);
+
+  // 🔥 FIX: Load flagged data when currentTab becomes "flags"
+  useEffect(() => {
+    if (currentTab === "flags" && currentView === "flagged") {
+      console.log('📊 currentTab is now "flags" - loading flagged messages');
+      fetchData();
     }
-  }, [location.pathname, currentView, savePageMemory]);
+  }, [currentTab, currentView, fetchData]);
 
   // REMOVED: Blocking initial data load - now purely WebSocket-driven for faster page load
   // OLD CODE: useEffect(() => { fetchData(); }, []); 
@@ -2569,7 +2589,9 @@ export default function App() {
             <Route path="/status" element={<StatusView />} />
             <Route path="/qr" element={<QRView />} />
             <Route path="/about" element={<AboutView />} />
-            <Route path="/whatsapp_routing" element={<WhatsAppRoutingPage />} />
+            <Route path="/whatsapp_routing" element={<WhatsAppRoutingPageV2 />} />
+            <Route path="/whatsapp_groups_v2" element={<WhatsAppGroupsV2 />} />
+            <Route path="/dialog_test_v3" element={<DialogTestV3 />} />
             <Route path="/ai_confidence" element={<AIConfidenceManagement />} />
             <Route path="/dynamic_categories" element={<DynamicCategoriesPage />} />
             <Route path="/endpoints" element={<EndpointsPage />} />
@@ -3760,6 +3782,9 @@ export default function App() {
   function QRView() {
     const [qrContent, setQrContent] = useState('');
     const [loading, setLoading] = useState(true);
+    const [forceLogoutLoading, setForceLogoutLoading] = useState(false);
+    const [confirmationOpen, setConfirmationOpen] = useState(false);
+    const [confirmationInput, setConfirmationInput] = useState('');
     const [status, setStatus] = useState('');
 
     useEffect(() => {
@@ -3904,6 +3929,73 @@ export default function App() {
       };
     }, []);
 
+    // Force Logout Handler with Double Confirmation
+    const handleForceLogout = () => {
+      setConfirmationOpen(true);
+      setConfirmationInput('');
+    };
+
+    const handleConfirmForceLogout = async () => {
+      if (confirmationInput !== 'CONFIRM') {
+        alert('Please type "CONFIRM" to proceed with force logout');
+        return;
+      }
+
+      setConfirmationOpen(false);
+      setForceLogoutLoading(true);
+      
+      try {
+        console.log('🚨 Starting force logout process...');
+        
+        const response = await fetch(apiUrl('/api/whatsapp/force-logout'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            confirmationToken: 'FORCE_LOGOUT_CONFIRMED'
+          })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          setQrContent(`
+            <div style="padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 10px 0; text-align: center;">
+              <p style="font-size: 18px; margin-bottom: 10px;">✅ <strong>Force Logout Successful!</strong></p>
+              <p style="color: #666; font-size: 14px;">All session data has been cleared</p>
+              <p style="color: #666; font-size: 14px;">System is reinitializing... New QR code will appear shortly</p>
+            </div>
+          `);
+          
+          // Auto-refresh QR code after 3 seconds
+          setTimeout(() => {
+            fetchQRCode();
+          }, 3000);
+          
+        } else {
+          throw new Error(result.error || 'Force logout failed');
+        }
+
+      } catch (error) {
+        console.error('❌ Force logout error:', error);
+        setQrContent(`
+          <div style="padding: 20px; background: #ffebee; border-radius: 8px; margin: 10px 0; text-align: center;">
+            <p style="font-size: 16px; margin-bottom: 10px;">❌ <strong>Force Logout Failed</strong></p>
+            <p style="color: #c62828; font-size: 14px;">${error.message}</p>
+            <p style="color: #666; font-size: 12px;">Please try again or contact support</p>
+          </div>
+        `);
+      } finally {
+        setForceLogoutLoading(false);
+      }
+    };
+
+    const handleCancelForceLogout = () => {
+      setConfirmationOpen(false);
+      setConfirmationInput('');
+    };
+
     const fetchQRCode = async () => {
       try {
         const response = await fetch(apiUrl('/api/whatsapp/qr'));
@@ -4025,6 +4117,30 @@ export default function App() {
                 >
                   📊 View Status
                 </Button>
+                
+                {/* ENHANCED: Force Logout Button */}
+                <Button
+                  variant="outlined"
+                  onClick={handleForceLogout}
+                  sx={{ 
+                    color: BRAND_COLORS.red,
+                    borderColor: BRAND_COLORS.red,
+                    '&:hover': {
+                      backgroundColor: 'rgba(244, 67, 54, 0.04)',
+                      borderColor: BRAND_COLORS.red,
+                    }
+                  }}
+                  disabled={forceLogoutLoading}
+                >
+                  {forceLogoutLoading ? (
+                    <>
+                      <CircularProgress size={16} sx={{ mr: 1 }} />
+                      Logging Out...
+                    </>
+                  ) : (
+                    '🚨 Force Logout'
+                  )}
+                </Button>
               </Box>
             </Box>
           )}
@@ -4066,6 +4182,66 @@ export default function App() {
             </Button>
           </Box>
         </Card>
+
+        {/* ENHANCED: Force Logout Confirmation Dialog */}
+        <Dialog
+          open={confirmationOpen}
+          onClose={handleCancelForceLogout}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ 
+            backgroundColor: BRAND_COLORS.red, 
+            color: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1
+          }}>
+            🚨 Force Logout Confirmation
+          </DialogTitle>
+          <DialogContent sx={{ mt: 2 }}>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              <strong>⚠️ WARNING:</strong> This will completely clear all WhatsApp session data 
+              and force a complete logout. You will need to scan a new QR code to reconnect.
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 3, color: 'gray' }}>
+              This action cannot be undone and will:
+            </Typography>
+            <ul style={{ marginLeft: '20px', marginBottom: '20px' }}>
+              <li>Destroy the current WhatsApp connection</li>
+              <li>Clear all saved session files</li>
+              <li>Require a fresh QR code scan</li>
+              <li>Interrupt any ongoing message processing</li>
+            </ul>
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              Type <strong>"CONFIRM"</strong> below to proceed:
+            </Typography>
+            <TextField
+              fullWidth
+              value={confirmationInput}
+              onChange={(e) => setConfirmationInput(e.target.value.toUpperCase())}
+              placeholder="Type CONFIRM here"
+              variant="outlined"
+              autoFocus
+            />
+          </DialogContent>
+          <DialogActions sx={{ p: 3 }}>
+            <Button onClick={handleCancelForceLogout} sx={{ color: BRAND_COLORS.darkGray }}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleConfirmForceLogout}
+              variant="contained"
+              sx={{ 
+                backgroundColor: BRAND_COLORS.red,
+                '&:hover': { backgroundColor: '#c62828' }
+              }}
+              disabled={confirmationInput !== 'CONFIRM'}
+            >
+              Force Logout
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     );
   }
@@ -4158,7 +4334,9 @@ export default function App() {
             <Route path="/status" element={<StatusView />} />
             <Route path="/qr" element={<QRView />} />
             <Route path="/about" element={<AboutView />} />
-            <Route path="/whatsapp_routing" element={<WhatsAppRoutingPage />} />
+            <Route path="/whatsapp_routing" element={<WhatsAppRoutingPageV2 />} />
+            <Route path="/whatsapp_groups_v2" element={<WhatsAppGroupsV2 />} />
+            <Route path="/dialog_test_v3" element={<DialogTestV3 />} />
             <Route path="/ai_confidence" element={<AIConfidenceManagement />} />
             <Route path="/dynamic_categories" element={<DynamicCategoriesPage />} />
             <Route path="/endpoints" element={<EndpointsPage />} />

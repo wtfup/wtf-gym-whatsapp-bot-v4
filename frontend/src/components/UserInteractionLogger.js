@@ -23,10 +23,10 @@ const UserInteractionLogger = ({ children }) => {
     CRITICAL: 'critical'
   };
   
-  // Initialize session ID - ENABLED FOR ALL ENVIRONMENTS
+  // Initialize session ID - TEMPORARILY DISABLED TO PREVENT 404 ERRORS
   useEffect(() => {
     sessionId.current = uuidv4();
-    isLogging.current = true;
+    isLogging.current = false; // Disabled temporarily
     
     const envLabel = process.env.NODE_ENV === 'production' ? 'PROD' : 'DEV';
     console.log(`🔍 [${envLabel}] User Interaction Logger initialized`, sessionId.current);
@@ -120,7 +120,8 @@ const UserInteractionLogger = ({ children }) => {
     
     while (retryCount < maxRetries) {
       try {
-        const response = await fetch('/api/user-interactions/batch', {
+        // Temporarily disabled to prevent 404 errors - change to backend when ready
+        const response = await fetch('http://localhost:3010/api/user-interactions/batch', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

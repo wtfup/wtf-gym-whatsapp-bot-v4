@@ -5,6 +5,7 @@ import {
   Paper, IconButton, Tooltip, LinearProgress, Divider, Collapse, Dialog, DialogTitle,
   DialogContent, DialogActions, List, ListItem, ListItemText, ListItemIcon, Badge
 } from '@mui/material';
+import environment from '../config/environment';
 import { styled } from '@mui/material/styles';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
@@ -123,15 +124,19 @@ const AnalyticsPage = () => {
     type: ''
   });
 
+  // API URL helper
+  const apiUrl = (path) => `${environment.apiBaseUrl}${path}`;
+
   // Fetch comprehensive analytics data
   const fetchAnalyticsData = async () => {
+    console.log('🚀 ANALYTICS: Starting fetchAnalyticsData...');
     setLoading(true);
     try {
       // Fetch multiple endpoints in parallel
       const [issueRes, logsRes, flagsRes] = await Promise.all([
-        fetch('/api/issue_management'),
-        fetch('/api/messages'),
-        fetch('/api/flags')
+        fetch(apiUrl('/api/issue_management')),
+        fetch(apiUrl('/api/messages')),
+        fetch(apiUrl('/api/flags'))
       ]);
 
       const [issueData, allLogs, allFlags] = await Promise.all([
@@ -317,14 +322,26 @@ const AnalyticsPage = () => {
         }
       ];
 
-      setAnalyticsData({
+      // DEBUG: Log the processed data
+      console.log('🔍 ANALYTICS DEBUG:');
+      console.log('📊 issueData:', issueData);
+      console.log('📨 allLogs count:', allLogs.length);
+      console.log('🚩 allFlags count:', allFlags.length);
+      console.log('🏢 departmentStats:', departmentStats);
+      console.log('📋 categoryStats:', categoryStats);
+      console.log('🏋️ gymStats:', gymStats);
+
+      const finalData = {
         departments: Object.values(departmentStats),
         categories: categoryStats,
         gyms: Object.values(gymStats).sort((a, b) => b.flaggedMessages - a.flaggedMessages),
         topIssues,
         trends: trendData,
         metrics
-      });
+      };
+
+      console.log('🎯 Final analyticsData:', finalData);
+      setAnalyticsData(finalData);
 
     } catch (error) {
       console.error('Failed to fetch analytics data:', error);
@@ -334,6 +351,7 @@ const AnalyticsPage = () => {
   };
 
   useEffect(() => {
+    console.log('📊 ANALYTICS: useEffect triggered, calling fetchAnalyticsData');
     fetchAnalyticsData();
   }, [timeRange, selectedDepartment, selectedGym]);
 
@@ -494,7 +512,9 @@ const AnalyticsPage = () => {
             Issues by Department
           </Typography>
           <Grid container spacing={2}>
-            {(analyticsData.departments || []).map((dept, index) => (
+            {(() => {
+              console.log('🎨 RENDERING: analyticsData.departments:', analyticsData.departments);
+              return (analyticsData.departments || []).map((dept, index) => (
               <Grid item xs={12} sm={6} md={4} key={index}>
                 <DepartmentCard 
                   color={getDepartmentColor(dept.name)}
@@ -518,7 +538,7 @@ const AnalyticsPage = () => {
                   </CardContent>
                 </DepartmentCard>
               </Grid>
-            ))}
+            ))})()}
           </Grid>
         </Grid>
       </Grid>

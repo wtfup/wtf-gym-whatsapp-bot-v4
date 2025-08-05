@@ -5,9 +5,11 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const axios = require('axios');
 
 const logger = require('./logger');
 const whatsappClient = require('./whatsapp');
+const whatsappDataManager = require('./whatsapp-data-manager');
 const { PrismaClient } = require('@prisma/client');
 
 const app = express();
@@ -22,6 +24,13 @@ const io = socketIo(server, {
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 
+// SLACK CONFIGURATION
+const SLACK_CONFIG = {
+  webhookUrl: process.env.SLACK_WEBHOOK_URL || '',
+  environment: process.env.ENVIRONMENT || 'development',
+  enabled: !!(process.env.SLACK_WEBHOOK_URL && !process.env.SLACK_WEBHOOK_URL.includes('REPLACE_WITH'))
+};
+
 // Middleware
 app.use(cors({
   origin: process.env.CORS_ORIGIN || "http://localhost:5173"
@@ -30,6 +39,175 @@ app.use(express.json());
 
 // MEDIA SERVING: Static media files endpoint
 app.use('/api/media', express.static(path.join(__dirname, '..', 'public', 'media')));
+
+// ===========================================
+// SLACK NOTIFICATION FUNCTION
+// ===========================================
+
+/**
+ * Send rich Slack notification with comprehensive formatting
+ * @param {Object} messageData - Original message data
+ * @param {Object} routingResult - Routing result data (optional)
+ * @param {Object} flaggingData - Flagging data (optional)
+ * @returns {Promise<Object>} - Success/failure result
+ */
+const sendSlackNotification = async (messageData, routingResult = null, flaggingData = null) => {
+  if (!SLACK_CONFIG.enabled || !SLACK_CONFIG.webhookUrl) {
+    logger.info('⚠️ SLACK: Webhook not configured - skipping notification');
+    return { success: false, reason: 'not_configured' };
+  }
+
+  try {
+    const timestamp = new Date(messageData.received_at || new Date()).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata'
+    });
+    const environment = SLACK_CONFIG.environment.toUpperCase();
+    const envEmoji = environment === 'DEVELOPMENT' ? '🧪' : '🏭';
+    
+    let slackMessage = {
+      username: `WTF Gym Bot [${environment}]`,
+      icon_emoji: ':robot_face:',
+      attachments: []
+    };
+
+    // FLAGGED MESSAGE NOTIFICATION
+    if (flaggingData) {
+      const severity = flaggingData.flagType || 'medium';
+      const severityColor = severity === 'high' ? '#E50012' : severity === 'medium' ? '#FF9800' : '#2E7D32';
+      const severityEmoji = severity === 'high' ? '🔴' : severity === 'medium' ? '🟡' : '🟢';
+      
+      // Determine issue category based on content
+      let issueCategory = 'General Complaint';
+      let department = 'Management';
+      
+      const message = messageData.message?.toLowerCase() || '';
+      const intent = messageData.intent?.toLowerCase() || '';
+      
+      if (message.includes('machine') || message.includes('equipment') || intent.includes('equipment')) {
+        issueCategory = 'Facility - Equipment & Machines';
+        department = 'Technical';
+      } else if (message.includes('trainer') || message.includes('staff') || intent.includes('staff')) {
+        issueCategory = 'Staff - Service Quality';
+        department = 'Operations';
+      } else if (message.includes('payment') || message.includes('fee') || intent.includes('billing')) {
+        issueCategory = 'Billing & Membership';
+        department = 'Finance';
+      } else if (message.includes('clean') || message.includes('dirty') || intent.includes('hygiene')) {
+        issueCategory = 'Hygiene & Cleanliness';
+        department = 'Operations';
+      }
+      
+      // Enhanced Slack notification with rich formatting
+      slackMessage.attachments.push({
+        color: severityColor,
+        pretext: `${envEmoji} *Action Required* - WTF GYM ISSUE`,
+        title: `${severityEmoji} ${issueCategory}`,
+        title_link: environment === 'DEVELOPMENT' ? 
+          'http://localhost:5010/flagged' : 
+          'https://wtf-whatsapp-bot.fly.dev/flagged',
+        fields: [
+          {
+            title: '🏷️ Issue Category',
+            value: issueCategory,
+            short: true
+          },
+          {
+            title: '🏢 Department',
+            value: department,
+            short: true
+          },
+          {
+            title: '📍 Location',
+            value: messageData.group_name || 'Direct Message',
+            short: true
+          },
+          {
+            title: '👤 Reported By',
+            value: `${messageData.sender_name || messageData.fromName} (${messageData.number || messageData.fromNumber || 'N/A'})`,
+            short: true
+          },
+          {
+            title: '🚨 Severity',
+            value: severity.toUpperCase(),
+            short: true
+          },
+          {
+            title: '⚡ Confidence',
+            value: `${Math.round((flaggingData.confidence || messageData.confidence || 0) * 100)}%`,
+            short: true
+          },
+          {
+            title: '🤖 AI Analysis',
+            value: messageData.sentiment ? `${messageData.sentiment} sentiment` : 'Processing...',
+            short: true
+          },
+          {
+            title: '🎯 Intent',
+            value: messageData.intent || 'Unknown',
+            short: true
+          },
+          {
+            title: '📝 Issue Details',
+            value: `"${messageData.message ? messageData.message.substring(0, 200) : messageData.body?.substring(0, 200) || 'No message content'}${(messageData.message || messageData.body || '').length > 200 ? '...' : ''}"`,
+            short: false
+          }
+        ],
+        footer: `WTF Gym Intelligence System | ${environment} | ${timestamp}`,
+        ts: Math.floor(new Date(messageData.received_at || new Date()).getTime() / 1000)
+      });
+    }
+    
+    // ROUTING SUCCESS NOTIFICATION
+    if (routingResult && routingResult.success) {
+      slackMessage.attachments.push({
+        color: '#2E7D32',
+        pretext: `${envEmoji} *Auto-Routing Success*`,
+        title: '✅ Message Successfully Routed to WhatsApp Group',
+        fields: [
+          {
+            title: '🎯 Target Group',
+            value: routingResult.targetGroup || 'Unknown Group',
+            short: true
+          },
+          {
+            title: '📋 Rule Applied',
+            value: routingResult.ruleName || 'AI-based routing',
+            short: true
+          },
+          {
+            title: '⚡ Processing Time',
+            value: `${routingResult.processingTime || 0}ms`,
+            short: true
+          },
+          {
+            title: '🔄 Status',
+            value: 'Successfully delivered to WhatsApp group',
+            short: true
+          }
+        ],
+        footer: `WTF Gym Routing System | ${environment}`,
+        ts: Math.floor(Date.now() / 1000)
+      });
+    }
+
+    // Send to Slack
+    const response = await axios.post(SLACK_CONFIG.webhookUrl, slackMessage, {
+      timeout: 10000,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (response.status === 200) {
+      logger.success(`✅ SLACK: Notification sent successfully to ${environment} channel`);
+      return { success: true, response: response.data };
+    } else {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+  } catch (error) {
+    logger.error('❌ SLACK: Failed to send notification', error);
+    return { success: false, error: error.message };
+  }
+};
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -567,18 +745,50 @@ app.delete('/api/routing-rules/:id', async (req, res) => {
   }
 });
 
-// WhatsApp Groups Management API  
+// WhatsApp Groups Management API - Via Data Manager with Database Configuration
 app.get('/api/whatsapp-groups', async (req, res) => {
   try {
-    const groups = await prisma.whatsAppGroup.findMany({
-      orderBy: { department: 'asc' }
+    logger.info('📡 API: Groups requested via Data Manager with DB config');
+    
+    // Get groups from centralized data manager (WhatsApp chat data)
+    const cachedGroups = whatsappDataManager.getCachedGroups();
+    const stats = whatsappDataManager.getDataStats();
+    
+    // Get database configuration for all groups
+    const dbGroups = await prisma.whatsAppGroup.findMany();
+    const dbGroupsMap = new Map(dbGroups.map(g => [g.group_id, g]));
+    
+    // Merge WhatsApp chat data with database configuration
+    const groups = cachedGroups.map(group => {
+      const dbConfig = dbGroupsMap.get(group.id || group.group_id);
+      return {
+        ...group,
+        // Add database fields
+        is_active: dbConfig?.is_active || false,
+        department: dbConfig?.department || 'UNASSIGNED',
+        priority_level: dbConfig?.priority_level || 5,
+        response_time_kpi: dbConfig?.response_time_kpi || 60,
+        configured_in_db: !!dbConfig
+      };
     });
     
-    res.json(groups);
+    res.json({
+      success: true,
+      groups: groups,
+      count: groups.length,
+      lastUpdate: stats.lastUpdate,
+      isConnected: stats.isConnected,
+      fromDataManager: true,
+      dbConfigMerged: true
+    });
+    
+    logger.info(`✅ Returned ${groups.length} groups from Data Manager (${dbGroups.length} configured in DB)`);
+    
   } catch (error) {
-    logger.error('❌ WHATSAPP GROUPS: Failed to fetch groups', error);
+    logger.error('❌ API: Failed to fetch groups from Data Manager', error);
     res.status(500).json({ 
-      error: 'Failed to fetch WhatsApp groups',
+      success: false,
+      error: 'Failed to fetch WhatsApp groups from Data Manager',
       details: error.message 
     });
   }
@@ -617,17 +827,67 @@ app.post('/api/whatsapp-groups', async (req, res) => {
   }
 });
 
+// GET single WhatsApp group by ID
+app.get('/api/whatsapp-groups/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Handle both database primary key ID and WhatsApp group ID
+    const whereClause = isNaN(id) ? { group_id: id } : { id: parseInt(id) };
+    
+    const group = await prisma.whatsAppGroup.findUnique({
+      where: whereClause
+    });
+
+    if (!group) {
+      return res.status(404).json({ 
+        error: 'WhatsApp group not found',
+        searchedId: id 
+      });
+    }
+
+    logger.info(`✅ WHATSAPP GROUPS: Retrieved group ID ${id}`);
+    res.json(group);
+  } catch (error) {
+    logger.error('❌ WHATSAPP GROUPS: Failed to get group', error);
+    res.status(500).json({ 
+      error: 'Failed to get WhatsApp group',
+      details: error.message 
+    });
+  }
+});
+
 app.put('/api/whatsapp-groups/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const { name, description, isActive, allowNotifications, ...otherData } = req.body;
+
+    // Handle both database primary key ID and WhatsApp group ID
+    const whereClause = isNaN(id) ? { group_id: id } : { id: parseInt(id) };
+    
+    // Map frontend field names to database field names
+    const updateData = {
+      group_name: name,  // Frontend 'name' → Database 'group_name'
+      description: description || '',  // Keep description as is
+      is_active: isActive,  // Frontend 'isActive' → Database 'is_active'
+      // Note: allowNotifications doesn't exist in schema, skipping
+      updated_at: new Date(),
+      ...otherData  // Include any other valid fields
+    };
+
+    // Remove undefined/null values to avoid Prisma errors
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined || updateData[key] === null) {
+        delete updateData[key];
+      }
+    });
 
     const updatedGroup = await prisma.whatsAppGroup.update({
-      where: { id: parseInt(id) },
+      where: whereClause,
       data: updateData
     });
 
-    logger.info(`✅ WHATSAPP GROUPS: Updated group ID ${id}`);
+    logger.info(`✅ WHATSAPP GROUPS: Updated group ID ${id} with fields:`, Object.keys(updateData));
     res.json(updatedGroup);
   } catch (error) {
     logger.error('❌ WHATSAPP GROUPS: Failed to update group', error);
@@ -642,8 +902,11 @@ app.delete('/api/whatsapp-groups/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Handle both database primary key ID and WhatsApp group ID
+    const whereClause = isNaN(id) ? { group_id: id } : { id: parseInt(id) };
+
     await prisma.whatsAppGroup.delete({
-      where: { id: parseInt(id) }
+      where: whereClause
     });
 
     logger.info(`✅ WHATSAPP GROUPS: Deleted group ID ${id}`);
@@ -661,7 +924,7 @@ app.delete('/api/whatsapp-groups/:id', async (req, res) => {
 app.get('/api/issue-categories', async (req, res) => {
   try {
     const categories = await prisma.issueCategory.findMany({
-      orderBy: { priority_level: 'asc' }
+      orderBy: { priority_weight: 'asc' }
     });
     
     res.json(categories);
@@ -858,48 +1121,84 @@ app.post('/api/manual-routing', async (req, res) => {
 
 app.get('/api/messages', async (req, res) => {
   try {
-    const { limit = 50, offset = 0 } = req.query;
-    const messages = await prisma.message.findMany({
-      orderBy: { timestamp: 'desc' },
-      take: parseInt(limit),
-      skip: parseInt(offset)
-    });
+    const { limit = 50, offset = 0, group, sender, q } = req.query;
     
-    // MAP DATABASE FIELDS TO FRONTEND EXPECTED FIELD NAMES
-    const mappedMessages = messages.map(msg => ({
+    // 🔥 USE WHATSAPP DATA MANAGER FOR FRESH MESSAGES
+    const cachedMessages = whatsappDataManager.getCachedMessages();
+    const dataStats = whatsappDataManager.getDataStats();
+    
+    logger.info(`📱 API: Messages requested - ${cachedMessages.length} cached, connected: ${dataStats.isConnected}`);
+    
+    // Apply filters if provided
+    let filteredMessages = [...cachedMessages];
+    
+    if (group && group !== 'all') {
+      filteredMessages = filteredMessages.filter(msg => 
+        msg.chatName && msg.chatName.toLowerCase().includes(group.toLowerCase())
+      );
+    }
+    
+    if (sender && sender !== 'all') {
+      filteredMessages = filteredMessages.filter(msg => 
+        msg.fromName && msg.fromName.toLowerCase().includes(sender.toLowerCase())
+      );
+    }
+    
+    if (q) {
+      filteredMessages = filteredMessages.filter(msg => 
+        msg.body && msg.body.toLowerCase().includes(q.toLowerCase())
+      );
+    }
+    
+    // Sort by timestamp descending (newest first)
+    filteredMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    // Apply pagination
+    const startIndex = parseInt(offset);
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedMessages = filteredMessages.slice(startIndex, endIndex);
+    
+    // MAP TO FRONTEND EXPECTED FIELD NAMES
+    const mappedMessages = paginatedMessages.map(msg => ({
       ...msg,
-      sender_name: msg.fromName,
-      message: msg.body,
-      group_name: msg.chatName,
+      id: msg.id || `${msg.fromNumber}_${msg.timestamp}`,
+      sender_name: msg.fromName || 'Unknown',
+      message: msg.body || '',
+      group_name: msg.chatName || 'Direct Message',
       received_at: msg.timestamp,
-      number: msg.fromNumber,
+      number: msg.fromNumber || '',
       // AI ANALYSIS FIELDS
-      sentiment: msg.sentiment,
-      ai_sentiment: msg.sentiment,
-      intent: msg.intent,
-      ai_intent: msg.intent,
-      confidence: msg.confidence,
+      sentiment: msg.sentiment || 'neutral',
+      ai_sentiment: msg.sentiment || 'neutral',
+      intent: msg.intent || 'unknown',
+      ai_intent: msg.intent || 'unknown',
+      confidence: msg.confidence || 0,
       // MEDIA FIELDS FOR FRONTEND
       media_url: msg.mediaUrl,
       media_type: msg.mediaType,
       media_filename: msg.mediaFilename,
       media_size: msg.mediaSize,
       mime_type: msg.mimeType,
-      has_media: msg.hasMedia,
+      has_media: msg.hasMedia || false,
       // FLAGGING FIELDS
       flag_type: msg.isFlagged ? (msg.intent === 'complaint' ? 'complaint' : 'flagged') : null,
       flag_reason: msg.flagReason,
-      isFlagged: msg.isFlagged,
+      isFlagged: msg.isFlagged || false,
       // Keep original fields for compatibility
       fromName: msg.fromName,
       body: msg.body,
-      chatName: msg.chatName
+      chatName: msg.chatName,
+      // DATA MANAGER INFO
+      fromDataManager: true,
+      lastUpdate: dataStats.lastUpdate
     }));
+    
+    logger.info(`✅ Returned ${mappedMessages.length} messages from Data Manager (${filteredMessages.length} total after filters)`);
     
     res.json(mappedMessages);
   } catch (error) {
-    logger.error('Error fetching messages', error);
-    res.status(500).json({ error: 'Failed to fetch messages' });
+    logger.error('❌ Error fetching messages from Data Manager', error);
+    res.status(500).json({ error: 'Failed to fetch messages from Data Manager' });
   }
 });
 
@@ -1018,24 +1317,54 @@ app.post('/api/whatsapp/restart', async (req, res) => {
   }
 });
 
-// Flagged messages endpoints
+// ENHANCED: Force Logout - Complete session cleanup
+app.post('/api/whatsapp/force-logout', async (req, res) => {
+  try {
+    logger.info('🚨 FORCE LOGOUT REQUEST: Starting complete session cleanup');
+    
+    // Validate request (you could add authentication here)
+    const { confirmationToken } = req.body;
+    if (confirmationToken !== 'FORCE_LOGOUT_CONFIRMED') {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid confirmation token. This action requires explicit confirmation.' 
+      });
+    }
+    
+    // Perform force logout
+    const result = await whatsappClient.forceDestroy();
+    
+    logger.success('🎉 FORCE LOGOUT: API request completed successfully');
+    res.json(result);
+    
+  } catch (error) {
+    logger.error('🚨 FORCE LOGOUT API ERROR:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Flagged messages endpoints - FIXED: Query from messages table where isFlagged = true
 app.get('/api/flagged-messages', async (req, res) => {
   try {
     const { limit = 50, offset = 0, category, priority, status } = req.query;
     
-    const where = {};
-    if (category) where.category = category;
-    if (priority) where.priority = priority;
-    if (status) where.status = status;
+    const where = { isFlagged: true };
+    if (category) where.advanced_category = category;
+    if (priority) where.intent = priority; // Map priority to intent for now
+    if (status) where.flagReason = { contains: status };
 
-    const flaggedMessages = await prisma.flaggedMessage.findMany({
+    const flaggedMessages = await prisma.message.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { timestamp: 'desc' },
       take: parseInt(limit),
       skip: parseInt(offset)
     });
 
-    const total = await prisma.flaggedMessage.count({ where });
+    const total = await prisma.message.count({ where });
 
     // MAP DATABASE FIELDS TO FRONTEND EXPECTED FIELD NAMES
     const mappedMessages = flaggedMessages.map(msg => ({
@@ -1059,7 +1388,7 @@ app.get('/api/flagged-messages', async (req, res) => {
       mime_type: msg.mimeType,
       has_media: msg.hasMedia,
       // FLAGGING FIELDS
-      flag_type: msg.category || 'complaint',
+      flag_type: msg.intent === 'complaint' ? 'complaint' : 'flagged',
       flag_reason: msg.flagReason,
       isFlagged: true,
       // Keep original fields for compatibility
@@ -1068,12 +1397,97 @@ app.get('/api/flagged-messages', async (req, res) => {
       chatName: msg.chatName
     }));
 
-    res.json({ flaggedMessages: mappedMessages, total });
+    res.json({ messages: mappedMessages, total });
   } catch (error) {
     logger.error('Error fetching flagged messages', error);
     res.status(500).json({ error: 'Failed to fetch flagged messages' });
   }
 });
+
+// ADDED: /api/flags endpoint (alias for flagged messages) - Expected by AnalyticsPage
+app.get('/api/flags', async (req, res) => {
+  try {
+    const flaggedMessages = await prisma.message.findMany({
+      where: { isFlagged: true },
+      orderBy: { timestamp: 'desc' },
+      take: 100
+    });
+
+    // Map to format expected by AnalyticsPage
+    const mappedFlags = flaggedMessages.map(msg => ({
+      id: msg.id,
+      message: msg.body,
+      sender_name: msg.fromName,
+      group_name: msg.chatName || 'Direct Message',
+      flag_reason: msg.flagReason,
+      flag_type: msg.intent === 'complaint' ? 'complaint' : 'flagged',
+      timestamp: msg.timestamp,
+      received_at: msg.timestamp,
+      sentiment: msg.sentiment,
+      intent: msg.intent,
+      confidence: msg.confidence,
+      escalation_score: msg.escalation_score,
+      advanced_category: msg.advanced_category
+    }));
+
+    res.json(mappedFlags);
+  } catch (error) {
+    logger.error('Error fetching flags', error);
+    res.status(500).json({ error: 'Failed to fetch flags' });
+  }
+});
+
+// ADDED: /api/issue_management endpoint - Expected by AnalyticsPage
+app.get('/api/issue_management', async (req, res) => {
+  try {
+    // Get department analytics
+    const departmentStats = await prisma.message.groupBy({
+      by: ['chatName'],
+      where: { isFlagged: true },
+      _count: { id: true }
+    });
+
+    // Get category analytics  
+    const categoryStats = await prisma.message.groupBy({
+      by: ['advanced_category'],
+      where: { 
+        isFlagged: true,
+        advanced_category: { not: null }
+      },
+      _count: { id: true }
+    });
+
+    // Format for frontend
+    const analytics = {
+      by_department: departmentStats.map(dept => ({
+        department: dept.chatName || 'Unknown',
+        count: dept._count.id
+      })),
+      by_category: categoryStats.map(cat => ({
+        category: cat.advanced_category,
+        count: cat._count.id,
+        color: getColorForCategory(cat.advanced_category)
+      }))
+    };
+
+    res.json({ analytics });
+  } catch (error) {
+    logger.error('Error fetching issue management data', error);
+    res.status(500).json({ error: 'Failed to fetch issue management data' });
+  }
+});
+
+// Helper function for category colors
+function getColorForCategory(category) {
+  const colors = {
+    'URGENT': '#E50012',
+    'ESCALATION': '#FF9800', 
+    'COMPLAINT': '#F44336',
+    'INSTRUCTION': '#2196F3',
+    'CASUAL': '#4CAF50'
+  };
+  return colors[category] || '#9E9E9E';
+}
 
 app.put('/api/flagged-messages/:id/resolve', async (req, res) => {
   try {
@@ -1234,6 +1648,612 @@ app.put('/api/routing-rules/:id', async (req, res) => {
   }
 });
 
+// ===========================================
+// MISSING API ENDPOINTS FROM DOCUMENTATION
+// ===========================================
+
+// GET /api/routing-logs - Fetch routing logs with pagination and filters
+app.get('/api/routing-logs', async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 50, 
+      category, 
+      group, 
+      status, 
+      from_date, 
+      to_date 
+    } = req.query;
+    
+    const offset = (page - 1) * limit;
+    const whereClause = {};
+    
+    // Build filters
+    if (status) {
+      whereClause.routing_success = status === 'success';
+    }
+    
+    if (from_date && to_date) {
+      whereClause.routed_at = {
+        gte: new Date(from_date),
+        lte: new Date(to_date)
+      };
+    }
+    
+    const logs = await prisma.messageRoutingLog.findMany({
+      where: whereClause,
+      include: {
+        routing_rule: {
+          include: {
+            issue_category: true,
+            whatsapp_group: true
+          }
+        },
+        target_group: true
+      },
+      orderBy: { routed_at: 'desc' },
+      skip: offset,
+      take: parseInt(limit)
+    });
+    
+    // Get total count
+    const total = await prisma.messageRoutingLog.count({ where: whereClause });
+    
+    res.json({
+      success: true,
+      logs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    logger.error('❌ ROUTING LOGS: Failed to fetch routing logs', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch routing logs',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/whatsapp-groups/fresh - Get fresh WhatsApp groups via Data Manager
+app.get('/api/whatsapp-groups/fresh', async (req, res) => {
+  try {
+    logger.info('📡 API: Fresh groups requested via Data Manager');
+    
+    // Get groups from centralized data manager
+    const groups = whatsappDataManager.getCachedGroups();
+    const stats = whatsappDataManager.getDataStats();
+    
+    res.json({ 
+      success: true, 
+      groups: groups,
+      count: groups.length,
+      lastUpdate: stats.lastUpdate,
+      isConnected: stats.isConnected,
+      fromDataManager: true,
+      clientStatus: stats.isConnected ? 'ready' : 'not_ready'
+    });
+    
+    logger.info(`✅ Returned ${groups.length} groups from Data Manager`);
+    
+  } catch (error) {
+    logger.error('❌ API: Failed to fetch groups from Data Manager', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch WhatsApp groups from Data Manager',
+      details: error.message
+    });
+  }
+});
+
+// 🔄 FORCE REFRESH ALL DATA - Manual trigger for Data Manager
+app.post('/api/whatsapp/force-refresh', async (req, res) => {
+  try {
+    logger.info('🔄 API: Force refresh requested');
+    
+    const stats = await whatsappDataManager.forceRefresh();
+    
+    res.json({
+      success: true,
+      message: 'Data refresh completed successfully',
+      stats: stats,
+      timestamp: new Date().toISOString()
+    });
+    
+    logger.success('✅ API: Force refresh completed successfully');
+    
+  } catch (error) {
+    logger.error('❌ API: Force refresh failed', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to refresh WhatsApp data',
+      details: error.message
+    });
+  }
+});
+
+// 📊 GET DATA MANAGER STATS
+app.get('/api/whatsapp/data-stats', async (req, res) => {
+  try {
+    const stats = whatsappDataManager.getDataStats();
+    
+    res.json({
+      success: true,
+      stats: stats,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    logger.error('❌ API: Failed to get data stats', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get data statistics',
+      details: error.message
+    });
+  }
+});
+
+// 📧 GET SENDERS FROM DATA MANAGER
+app.get('/api/whatsapp/senders', async (req, res) => {
+  try {
+    const senders = whatsappDataManager.getCachedSenders();
+    const stats = whatsappDataManager.getDataStats();
+    
+    res.json({
+      success: true,
+      senders: senders,
+      count: senders.length,
+      lastUpdate: stats.lastUpdate,
+      fromDataManager: true
+    });
+    
+  } catch (error) {
+    logger.error('❌ API: Failed to get senders', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get senders from Data Manager',
+      details: error.message
+    });
+  }
+});
+
+// GET /api/slack/config - Get Slack configuration status
+app.get('/api/slack/config', async (req, res) => {
+  try {
+    const slackStatus = {
+      enabled: SLACK_CONFIG.enabled,
+      configured: !!(SLACK_CONFIG.webhookUrl && !SLACK_CONFIG.webhookUrl.includes('REPLACE_WITH')),
+      environment: SLACK_CONFIG.environment,
+      webhook_url_masked: SLACK_CONFIG.webhookUrl ?
+        SLACK_CONFIG.webhookUrl.substring(0, 50) + '...' : 'Not configured'
+    };
+    
+    res.json(slackStatus);
+  } catch (error) {
+    logger.error('❌ SLACK CONFIG: Failed to get configuration', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to get Slack configuration',
+      details: error.message 
+    });
+  }
+});
+
+// POST /api/slack/test - Send test Slack notification
+app.post('/api/slack/test', async (req, res) => {
+  try {
+    const { message = 'Test notification from WTF Bot', severity = 'info' } = req.body;
+    
+    const testMessageData = {
+      message: message,
+      sender_name: 'Test User',
+      group_name: 'Test Group',
+      number: '+91XXXXXXXXXX',
+      received_at: new Date(),
+      sentiment: 'neutral',
+      intent: 'test'
+    };
+    
+    const testFlaggingData = {
+      flagType: severity,
+      flagReasons: ['test notification'],
+      confidence: 0.95
+    };
+    
+    const result = await sendSlackNotification(testMessageData, null, testFlaggingData);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Test Slack notification sent successfully',
+        environment: SLACK_CONFIG.environment,
+        webhook_status: 'active'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.reason || result.error || 'Failed to send notification',
+        details: result
+      });
+    }
+  } catch (error) {
+    logger.error('❌ SLACK TEST: Failed to send test notification', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to send test Slack notification',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/routing-stats - Get routing statistics and analytics
+app.get('/api/routing-stats', async (req, res) => {
+  try {
+    // Get overall routing statistics
+    const totalMessages = await prisma.messageRoutingLog.count();
+    const successfulRoutes = await prisma.messageRoutingLog.count({
+      where: { routing_success: true }
+    });
+    const failedRoutes = await prisma.messageRoutingLog.count({
+      where: { routing_success: false }
+    });
+    
+    // Get success rate by category
+    const categoryStats = await prisma.messageRoutingLog.groupBy({
+      by: ['target_group_id'],
+      _count: {
+        id: true,
+        routing_success: true
+      },
+      where: {
+        routing_success: true
+      }
+    });
+    
+    // Get total count by category (including failures)
+    const totalCategoryStats = await prisma.messageRoutingLog.groupBy({
+      by: ['target_group_id'],
+      _count: {
+        id: true
+      }
+    });
+
+    // Get group names separately
+    const groupIds = totalCategoryStats.map(stat => stat.target_group_id).filter(Boolean);
+    const groups = await prisma.whatsAppGroup.findMany({
+      where: { id: { in: groupIds } },
+      select: { id: true, group_name: true, department: true }
+    });
+    
+    // Get recent routing activity (last 24 hours)
+    const recentActivity = await prisma.messageRoutingLog.count({
+      where: {
+        routed_at: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
+        }
+      }
+    });
+    
+    // Calculate response times
+    const avgResponseTime = await prisma.messageRoutingLog.aggregate({
+      _avg: {
+        response_time: true
+      },
+      where: {
+        response_time: {
+          not: null
+        }
+      }
+    });
+    
+    // Merge category stats with group information
+    const categoryBreakdown = totalCategoryStats.map(totalStat => {
+      const successStat = categoryStats.find(s => s.target_group_id === totalStat.target_group_id);
+      const group = groups.find(g => g.id === totalStat.target_group_id);
+      const successfulRoutes = successStat?._count.routing_success || 0;
+      const totalRoutes = totalStat._count.id;
+      
+      return {
+        target_group_id: totalStat.target_group_id,
+        group_name: group?.group_name || 'Unknown Group',
+        department: group?.department || 'Unknown',
+        total_routes: totalRoutes,
+        successful_routes: successfulRoutes,
+        success_rate: totalRoutes > 0 ? ((successfulRoutes / totalRoutes) * 100).toFixed(1) : 0
+      };
+    });
+
+    const stats = {
+      overview: {
+        totalMessages,
+        successfulRoutes,
+        failedRoutes,
+        successRate: totalMessages > 0 ? (successfulRoutes / totalMessages * 100).toFixed(1) : 0,
+        recentActivity
+      },
+      performance: {
+        averageResponseTime: avgResponseTime._avg.response_time || 0,
+        routingEfficiency: totalMessages > 0 ? (successfulRoutes / totalMessages * 100).toFixed(1) : 0
+      },
+      categoryBreakdown,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    res.json({
+      success: true,
+      stats
+    });
+  } catch (error) {
+    logger.error('❌ ROUTING STATS: Failed to fetch routing statistics', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch routing statistics',
+      details: error.message 
+    });
+  }
+});
+
+// =============================================================================
+// CONTEXTUAL ANALYSIS API ENDPOINTS
+// =============================================================================
+
+// GET /api/contextual-analysis - Main contextual analysis data
+app.get('/api/contextual-analysis', async (req, res) => {
+  try {
+    const { timeframe = '7' } = req.query;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - parseInt(timeframe));
+
+    // Get all contextual analysis records
+    const analyses = await prisma.contextualAnalysis.findMany({
+      where: {
+        created_at: { gte: cutoffDate }
+      },
+      orderBy: { created_at: 'desc' }
+    });
+
+    // Calculate overall statistics
+    const totalAnalyses = analyses.length;
+    const avgRiskScore = analyses.reduce((sum, a) => sum + (a.risk_score || 0), 0) / totalAnalyses || 0;
+    const highRiskCount = analyses.filter(a => (a.risk_score || 0) >= 0.7).length;
+    
+    // Calculate risk assessment
+    const riskAssessment = {
+      overall_risk: avgRiskScore,
+      complexity_score: analyses.reduce((sum, a) => sum + (a.analysis_confidence || 0), 0) / totalAnalyses || 0,
+      total_analyses: totalAnalyses,
+      high_risk_analyses: highRiskCount,
+      risk_distribution: {
+        low: analyses.filter(a => (a.risk_score || 0) < 0.3).length,
+        medium: analyses.filter(a => (a.risk_score || 0) >= 0.3 && (a.risk_score || 0) < 0.7).length,
+        high: highRiskCount
+      }
+    };
+
+    res.json({
+      success: true,
+      data: {
+        total_analyses: totalAnalyses,
+        timeframe_days: parseInt(timeframe),
+        risk_assessment: riskAssessment,
+        recent_analyses: analyses.slice(0, 10)
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error fetching contextual analysis:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch contextual analysis data',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/contextual-analysis/patterns - Pattern insights
+app.get('/api/contextual-analysis/patterns', async (req, res) => {
+  try {
+    const { timeframe = '7' } = req.query;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - parseInt(timeframe));
+
+    // Get pattern data
+    const analyses = await prisma.contextualAnalysis.findMany({
+      where: {
+        created_at: { gte: cutoffDate }
+      },
+      orderBy: { risk_score: 'desc' }
+    });
+
+    // Process patterns
+    const patterns = analyses.map(analysis => {
+      let parsedRepetition = {};
+      let parsedEscalation = {};
+      
+      try {
+        parsedRepetition = JSON.parse(analysis.repetition_pattern || '{}');
+        parsedEscalation = JSON.parse(analysis.escalation_indicators || '{}');
+      } catch (e) {
+        // Handle parsing errors
+      }
+
+      return {
+        pattern_type: analysis.pattern_type || 'normal',
+        description: `Pattern detected for sender ${analysis.sender_number}`,
+        risk_score: analysis.risk_score || 0,
+        confidence: analysis.analysis_confidence || 0,
+        frequency: parsedRepetition.repetition_count || 1,
+        recommended_action: analysis.recommended_action || 'MONITOR',
+        sender_number: analysis.sender_number,
+        timestamp: analysis.created_at,
+        escalation_detected: parsedEscalation.escalation_detected || false
+      };
+    });
+
+    // Group patterns by type
+    const patternTypes = patterns.reduce((acc, pattern) => {
+      const type = pattern.pattern_type;
+      if (!acc[type]) acc[type] = [];
+      acc[type].push(pattern);
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      insights: patterns,
+      pattern_distribution: patternTypes,
+      summary: {
+        total_patterns: patterns.length,
+        high_risk_patterns: patterns.filter(p => p.risk_score >= 0.7).length,
+        escalation_patterns: patterns.filter(p => p.escalation_detected).length
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error fetching pattern insights:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch pattern insights',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/contextual-analysis/senders - Sender behavior analysis
+app.get('/api/contextual-analysis/senders', async (req, res) => {
+  try {
+    const { timeframe = '7' } = req.query;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - parseInt(timeframe));
+
+    // Get sender patterns
+    const senderData = await prisma.contextualAnalysis.groupBy({
+      by: ['sender_number'],
+      where: {
+        created_at: { gte: cutoffDate }
+      },
+      _count: { sender_number: true },
+      _avg: { 
+        risk_score: true,
+        analysis_confidence: true 
+      },
+      _max: { risk_score: true }
+    });
+
+    // Format sender analysis
+    const senderPatterns = senderData.map(sender => ({
+      sender_id: sender.sender_number,
+      pattern_frequency: sender._count.sender_number,
+      risk_score: sender._avg.risk_score || 0,
+      max_risk_score: sender._max.risk_score || 0,
+      confidence: sender._avg.analysis_confidence || 0,
+      behavior_type: (sender._avg.risk_score || 0) >= 0.7 ? 'High Risk' : 
+                     (sender._avg.risk_score || 0) >= 0.4 ? 'Moderate Risk' : 'Normal'
+    })).sort((a, b) => b.risk_score - a.risk_score);
+
+    res.json({
+      success: true,
+      sender_patterns: senderPatterns,
+      summary: {
+        total_senders: senderPatterns.length,
+        high_risk_senders: senderPatterns.filter(s => s.risk_score >= 0.7).length,
+        active_senders: senderPatterns.filter(s => s.pattern_frequency > 1).length
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error fetching sender analysis:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch sender analysis',
+      details: error.message 
+    });
+  }
+});
+
+// GET /api/contextual-analysis/temporal - Temporal pattern analysis
+app.get('/api/contextual-analysis/temporal', async (req, res) => {
+  try {
+    const { timeframe = '7' } = req.query;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - parseInt(timeframe));
+
+    // Get temporal data grouped by day
+    const temporalData = await prisma.contextualAnalysis.findMany({
+      where: {
+        created_at: { gte: cutoffDate }
+      },
+      select: {
+        created_at: true,
+        risk_score: true,
+        analysis_confidence: true,
+        pattern_type: true
+      },
+      orderBy: { created_at: 'asc' }
+    });
+
+    // Group by day and calculate metrics
+    const dayGroups = temporalData.reduce((acc, analysis) => {
+      const day = analysis.created_at.toISOString().split('T')[0];
+      if (!acc[day]) {
+        acc[day] = {
+          timestamp: day,
+          analyses: [],
+          total_count: 0,
+          avg_risk: 0,
+          pattern_intensity: 0,
+          risk_level: 0
+        };
+      }
+      acc[day].analyses.push(analysis);
+      acc[day].total_count++;
+      return acc;
+    }, {});
+
+    // Calculate daily metrics
+    const temporalAnalysis = Object.values(dayGroups).map(day => {
+      const avgRisk = day.analyses.reduce((sum, a) => sum + (a.risk_score || 0), 0) / day.total_count;
+      const avgConfidence = day.analyses.reduce((sum, a) => sum + (a.analysis_confidence || 0), 0) / day.total_count;
+      
+      return {
+        timestamp: day.timestamp,
+        pattern_intensity: avgConfidence,
+        risk_level: avgRisk,
+        total_analyses: day.total_count,
+        high_risk_count: day.analyses.filter(a => (a.risk_score || 0) >= 0.7).length
+      };
+    });
+
+    res.json({
+      success: true,
+      temporal_analysis: temporalAnalysis,
+      summary: {
+        total_days: temporalAnalysis.length,
+        avg_daily_analyses: temporalData.length / temporalAnalysis.length || 0,
+        peak_risk_day: temporalAnalysis.reduce((max, day) => 
+          day.risk_level > (max.risk_level || 0) ? day : max, {}
+        )
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error fetching temporal analysis:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch temporal analysis',
+      details: error.message 
+    });
+  }
+});
+
+// =============================================================================
+// SOCKET.IO CONNECTION HANDLING
+// =============================================================================
+
 // Socket.IO connection handling
 io.on('connection', (socket) => {
   logger.socket(`Client connected: ${socket.id}`);
@@ -1257,6 +2277,10 @@ io.on('connection', (socket) => {
 async function initializeWhatsApp() {
   try {
     whatsappClient.setSocketIO(io);
+
+// Initialize WhatsApp Data Manager
+whatsappDataManager.initialize(whatsappClient, io);
+logger.info('🌐 WhatsApp Data Manager initialized with client and socket');
     await whatsappClient.initialize();
   } catch (error) {
     logger.error('Failed to initialize WhatsApp client', error);
@@ -1283,6 +2307,361 @@ process.on('SIGTERM', async () => {
     logger.success('Server closed successfully');
     process.exit(0);
   });
+});
+
+// =============================================================================
+// WHATSAPP ROUTING API ENDPOINTS (for compatibility with copied UI)
+// =============================================================================
+
+// GET /api/whatsapp-routing-rules - Get all WhatsApp routing rules with enhanced details
+app.get('/api/whatsapp-routing-rules', async (req, res) => {
+  try {
+    // Get routing rules with relationships
+    const rules = await prisma.routingRule.findMany({
+      include: {
+        issue_category: {
+          select: {
+            id: true,
+            category_name: true,
+            department: true,
+            color_code: true,
+            keywords: true
+          }
+        },
+        whatsapp_group: {
+          select: {
+            id: true,
+            group_id: true,
+            group_name: true,
+            department: true,
+            is_active: true
+          }
+        }
+      },
+      orderBy: {
+        priority: 'asc'
+      }
+    });
+
+    // Get fresh WhatsApp groups for validation
+    let freshGroups = [];
+    try {
+      if (whatsappClient && whatsappClient.isReady) {
+        const chats = await whatsappClient.client.getChats();
+        freshGroups = chats.filter(chat => chat.isGroup).map(group => ({
+          id: group.id._serialized,
+          name: group.name,
+          participantCount: group.participants?.length || 0
+        }));
+      }
+    } catch (error) {
+      logger.warn('Could not fetch fresh WhatsApp groups for validation:', error.message);
+    }
+
+    // Format rules for frontend
+    const formattedRules = rules.map(rule => {
+      const freshGroup = freshGroups.find(g => g.id === rule.whatsapp_group?.group_id);
+      
+      return {
+        id: rule.id,
+        category_id: rule.category_id,
+        whatsapp_group_id: rule.whatsapp_group_id,
+        severity_filter: JSON.parse(rule.severity_filter || '["low","medium","high"]'),
+        is_active: rule.is_active,
+        created_at: rule.created_at,
+        updated_at: rule.updated_at,
+        
+        // Category details
+        category_name: rule.issue_category?.category_name || 'Unknown Category',
+        department: rule.issue_category?.department || 'General',
+        color_code: rule.issue_category?.color_code || '#757575',
+        
+        // Group details
+        group_name: rule.whatsapp_group?.group_name || 'Unknown Group',
+        group_status: {
+          botInGroup: !!freshGroup,
+          participantCount: freshGroup?.participantCount || 0,
+          isActive: rule.whatsapp_group?.is_active || false,
+          lastVerified: new Date().toISOString()
+        }
+      };
+    });
+
+    res.json({
+      success: true,
+      rules: formattedRules,
+      total: formattedRules.length,
+      lastUpdated: new Date().toISOString()
+    });
+
+  } catch (error) {
+    logger.error('❌ WHATSAPP ROUTING RULES: Failed to fetch routing rules', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch WhatsApp routing rules',
+      details: error.message
+    });
+  }
+});
+
+// POST /api/whatsapp-routing-rules - Create new WhatsApp routing rule
+app.post('/api/whatsapp-routing-rules', async (req, res) => {
+  try {
+    const { categoryId, whatsappGroupId, severityFilter, isActive = true } = req.body;
+    
+    // Validate required fields
+    if (!categoryId || !whatsappGroupId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Category ID and WhatsApp Group ID are required'
+      });
+    }
+
+    // Check if category exists
+    const category = await prisma.issueCategory.findUnique({
+      where: { id: parseInt(categoryId) }
+    });
+    
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        error: 'Issue category not found'
+      });
+    }
+
+    // Check if group exists (handle both database ID and WhatsApp group ID)
+    const group = await prisma.whatsAppGroup.findFirst({
+      where: {
+        OR: [
+          // If it's a number, treat as database primary key
+          ...(isNaN(whatsappGroupId) ? [] : [{ id: parseInt(whatsappGroupId) }]),
+          // Always check as WhatsApp group ID string
+          { group_id: whatsappGroupId }
+        ]
+      }
+    });
+    
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        error: 'WhatsApp group not found'
+      });
+    }
+
+    // Create routing rule
+    const newRule = await prisma.routingRule.create({
+      data: {
+        rule_name: `Route ${category.category_name} to ${group.group_name}`,
+        category_id: parseInt(categoryId),
+        whatsapp_group_id: group.id,
+        condition_logic: JSON.stringify({
+          ai_category: true,
+          keywords: true,
+          intent: true
+        }),
+        severity_filter: JSON.stringify(severityFilter || ['low', 'medium', 'high']),
+        is_active: isActive,
+        priority: category.priority_weight || 3
+      },
+      include: {
+        issue_category: true,
+        whatsapp_group: true
+      }
+    });
+
+    logger.info(`✅ ROUTING RULE: Created new rule for category "${category.category_name}" → group "${group.group_name}"`);
+
+    res.json({
+      success: true,
+      rule: newRule,
+      message: 'Routing rule created successfully'
+    });
+
+  } catch (error) {
+    logger.error('❌ WHATSAPP ROUTING RULES: Failed to create routing rule', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create WhatsApp routing rule',
+      details: error.message
+    });
+  }
+});
+
+// PUT /api/whatsapp-routing-rules/:id - Update WhatsApp routing rule
+app.put('/api/whatsapp-routing-rules/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { categoryId, whatsappGroupId, severityFilter, isActive } = req.body;
+    
+    // Check if rule exists
+    const existingRule = await prisma.routingRule.findUnique({
+      where: { id: parseInt(id) }
+    });
+    
+    if (!existingRule) {
+      return res.status(404).json({
+        success: false,
+        error: 'Routing rule not found'
+      });
+    }
+
+    // Prepare update data
+    const updateData = {};
+    
+    if (categoryId !== undefined) {
+      updateData.category_id = parseInt(categoryId);
+    }
+    
+    if (whatsappGroupId !== undefined) {
+      const group = await prisma.whatsAppGroup.findFirst({
+        where: {
+          OR: [
+            { id: parseInt(whatsappGroupId) },
+            { group_id: whatsappGroupId }
+          ]
+        }
+      });
+      
+      if (!group) {
+        return res.status(404).json({
+          success: false,
+          error: 'WhatsApp group not found'
+        });
+      }
+      
+      updateData.whatsapp_group_id = group.id;
+    }
+    
+    if (severityFilter !== undefined) {
+      updateData.severity_filter = JSON.stringify(severityFilter);
+    }
+    
+    if (isActive !== undefined) {
+      updateData.is_active = isActive;
+    }
+
+    // Update routing rule
+    const updatedRule = await prisma.routingRule.update({
+      where: { id: parseInt(id) },
+      data: updateData,
+      include: {
+        issue_category: true,
+        whatsapp_group: true
+      }
+    });
+
+    logger.info(`✅ ROUTING RULE: Updated rule ${id}`);
+
+    res.json({
+      success: true,
+      rule: updatedRule,
+      message: 'Routing rule updated successfully'
+    });
+
+  } catch (error) {
+    logger.error('❌ WHATSAPP ROUTING RULES: Failed to update routing rule', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update WhatsApp routing rule',
+      details: error.message
+    });
+  }
+});
+
+// DELETE /api/whatsapp-routing-rules/:id - Delete WhatsApp routing rule
+app.delete('/api/whatsapp-routing-rules/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if rule exists
+    const existingRule = await prisma.routingRule.findUnique({
+      where: { id: parseInt(id) }
+    });
+    
+    if (!existingRule) {
+      return res.status(404).json({
+        success: false,
+        error: 'Routing rule not found'
+      });
+    }
+
+    // Delete routing rule
+    await prisma.routingRule.delete({
+      where: { id: parseInt(id) }
+    });
+
+    logger.info(`✅ ROUTING RULE: Deleted rule ${id}`);
+
+    res.json({
+      success: true,
+      message: 'Routing rule deleted successfully'
+    });
+
+  } catch (error) {
+    logger.error('❌ WHATSAPP ROUTING RULES: Failed to delete routing rule', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete WhatsApp routing rule',
+      details: error.message
+    });
+  }
+});
+
+// POST /api/whatsapp-groups/:groupId/configure - Configure WhatsApp group
+app.post('/api/whatsapp-groups/:groupId/configure', async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { name, description, isActive = true } = req.body;
+    
+    // Check if group already exists in database
+    let group = await prisma.whatsAppGroup.findFirst({
+      where: {
+        OR: [
+          { id: parseInt(groupId) },
+          { group_id: groupId }
+        ]
+      }
+    });
+    
+    if (group) {
+      // Update existing group
+      group = await prisma.whatsAppGroup.update({
+        where: { id: group.id },
+        data: {
+          group_name: name || group.group_name,
+          description: description || group.description,
+          is_active: isActive
+        }
+      });
+    } else {
+      // Create new group configuration
+      group = await prisma.whatsAppGroup.create({
+        data: {
+          group_id: groupId,
+          group_name: name || 'New Group',
+          description: description || 'Configured WhatsApp group',
+          department: 'GENERAL',
+          is_active: isActive
+        }
+      });
+    }
+
+    logger.info(`✅ WHATSAPP GROUP: Configured group "${group.group_name}" (${groupId})`);
+
+    res.json({
+      success: true,
+      group: group,
+      message: 'WhatsApp group configured successfully'
+    });
+
+  } catch (error) {
+    logger.error('❌ WHATSAPP GROUP: Failed to configure group', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to configure WhatsApp group',
+      details: error.message
+    });
+  }
 });
 
 // Start server

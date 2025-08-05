@@ -13,36 +13,28 @@ async function seedDatabase() {
         group_name: 'Equipment Maintenance Team',
         department: 'EQUIPMENT_MAINTENANCE',
         priority_level: 1,
-        response_time_kpi: 15,
-        description: 'Handles all gym equipment breakdowns and maintenance issues',
-        contact_person: 'Maintenance Manager'
+        description: 'Handles all gym equipment breakdowns and maintenance issues'
       },
       {
         group_id: 'facility-management-group',
         group_name: 'Facility Management',
         department: 'FACILITY_MANAGEMENT',
         priority_level: 2,
-        response_time_kpi: 30,
-        description: 'HVAC, electricity, water, infrastructure issues',
-        contact_person: 'Facility Manager'
+        description: 'HVAC, electricity, water, infrastructure issues'
       },
       {
         group_id: 'customer-service-group',
         group_name: 'Customer Service Team',
         department: 'CUSTOMER_SERVICE',
         priority_level: 3,
-        response_time_kpi: 10,
-        description: 'Member complaints, billing, general inquiries',
-        contact_person: 'Customer Service Head'
+        description: 'Member complaints, billing, general inquiries'
       },
       {
         group_id: 'management-escalation-group',
         group_name: 'Management Escalation',
         department: 'MANAGEMENT',
         priority_level: 1,
-        response_time_kpi: 5,
-        description: 'Critical issues and escalated complaints',
-        contact_person: 'Gym Manager'
+        description: 'Critical issues and escalated complaints'
       }
     ];
 

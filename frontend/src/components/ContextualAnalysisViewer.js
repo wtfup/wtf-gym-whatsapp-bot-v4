@@ -45,6 +45,10 @@ import {
   Warning as WarningIcon
 } from '@mui/icons-material';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ScatterPlot, Scatter } from 'recharts';
+import environment from '../config/environment';
+
+// API URL helper
+const apiUrl = (endpoint) => `${environment.apiBaseUrl}${endpoint}`;
 
 // Brand colors for consistency
 const BRAND_COLORS = {
@@ -82,10 +86,10 @@ const ContextualAnalysisViewer = () => {
     setLoading(true);
     try {
       const [analysisRes, patternsRes, senderRes, temporalRes] = await Promise.all([
-        fetch(`/api/contextual-analysis?timeframe=${timeframe}`),
-        fetch(`/api/contextual-analysis/patterns?timeframe=${timeframe}`),
-        fetch(`/api/contextual-analysis/senders?timeframe=${timeframe}`),
-        fetch(`/api/contextual-analysis/temporal?timeframe=${timeframe}`)
+        fetch(apiUrl(`/api/contextual-analysis?timeframe=${timeframe}`)),
+        fetch(apiUrl(`/api/contextual-analysis/patterns?timeframe=${timeframe}`)),
+        fetch(apiUrl(`/api/contextual-analysis/senders?timeframe=${timeframe}`)),
+        fetch(apiUrl(`/api/contextual-analysis/temporal?timeframe=${timeframe}`))
       ]);
 
       const [analysis, patterns, senders, temporal] = await Promise.all([
@@ -95,11 +99,13 @@ const ContextualAnalysisViewer = () => {
         temporalRes.json()
       ]);
 
-      setAnalysisData(analysis);
+      console.log('Contextual Analysis Data Loaded:', { analysis, patterns, senders, temporal });
+
+      setAnalysisData(analysis.data || analysis);
       setPatternInsights(patterns.insights || []);
       setSenderAnalysis(senders.sender_patterns || []);
       setTemporalPatterns(temporal.temporal_analysis || []);
-      setRiskAssessment(analysis.risk_assessment || {});
+      setRiskAssessment(analysis.data?.risk_assessment || analysis.risk_assessment || {});
     } catch (error) {
       console.error('Failed to load contextual analysis:', error);
     } finally {

@@ -36,28 +36,30 @@ const DynamicCategoriesPage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch dynamic categories
-      const categoriesResponse = await fetch('/api/dynamic-categories?status=pending');
+      // 🔥 FIX: Use correct issue categories API
+      const categoriesResponse = await fetch('/api/issue-categories');
       const categoriesData = await categoriesResponse.json();
       
-      if (categoriesData.success) {
-        setDynamicCategories(categoriesData.categories);
+      // Backend returns array directly, not wrapped in success object
+      if (Array.isArray(categoriesData)) {
+        setDynamicCategories(categoriesData);
+        setExistingCategories(categoriesData); // Same data for merge options
+      } else if (categoriesData.success) {
+        setDynamicCategories(categoriesData.categories || []);
+        setExistingCategories(categoriesData.categories || []);
       }
 
-      // Fetch category trends
-      const trendsResponse = await fetch('/api/category-trends');
-      const trendsData = await trendsResponse.json();
-      
-      if (trendsData.success) {
-        setCategoryTrends(trendsData.trends);
-      }
-
-      // Fetch existing categories for merge options
-      const existingResponse = await fetch('/api/categories');
-      const existingData = await existingResponse.json();
-      
-      if (existingData.success) {
-        setExistingCategories(existingData.categories);
+      // Fetch category trends (optional - set empty if API doesn't exist)
+      try {
+        const trendsResponse = await fetch('/api/category-trends');
+        const trendsData = await trendsResponse.json();
+        
+        if (trendsData.success) {
+          setCategoryTrends(trendsData.trends);
+        }
+      } catch (error) {
+        console.log('Category trends API not available, skipping...');
+        setCategoryTrends([]);
       }
 
     } catch (error) {

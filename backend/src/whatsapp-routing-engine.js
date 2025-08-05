@@ -134,6 +134,354 @@ class WhatsAppRoutingEngine {
   }
 
   /**
+   * Get active routing rules from database
+   */
+  async getActiveRoutingRules() {
+    try {
+      const rules = await prisma.routingRule.findMany({
+        where: {
+          is_active: true,
+          whatsapp_group: {
+            is_active: true
+          }
+        },
+        include: {
+          issue_category: {
+            select: {
+              id: true,
+              category_name: true,
+              department: true,
+              keywords: true,
+              priority_weight: true,
+              auto_route: true
+            }
+          },
+          whatsapp_group: {
+            select: {
+              id: true,
+              group_id: true,
+              group_name: true,
+              department: true,
+              is_active: true
+            }
+          }
+        },
+        orderBy: {
+          priority: 'asc'
+        }
+      });
+      
+      return rules;
+    } catch (error) {
+      logger.error('❌ ROUTING: Failed to fetch routing rules from database:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Find matching routing rules based on message content and AI analysis
+   */
+  async findMatchingRules(messageData, aiAnalysisResult, routingRules) {
+    const matchingRules = [];
+    
+    for (const rule of routingRules) {
+      let matches = false;
+      let matchReason = '';
+      
+      // Skip if auto-routing is disabled for this category
+      if (!rule.issue_category.auto_route) {
+        continue;
+      }
+      
+      // Method 1: Check AI category mapping
+      const categoryMatch = await this.checkCategoryMatch(aiAnalysisResult, rule.issue_category);
+      if (categoryMatch.matches) {
+        matches = true;
+        matchReason = categoryMatch.reason;
+      }
+      
+      // Method 2: Keyword matching
+      if (!matches) {
+        const keywordMatch = await this.checkKeywordMatch(messageData.message, rule.issue_category);
+        if (keywordMatch.matches) {
+          matches = true;
+          matchReason = keywordMatch.reason;
+        }
+      }
+      
+      // Method 3: Intent-based matching
+      if (!matches) {
+        const intentMatch = await this.checkIntentMatch(aiAnalysisResult.intent, rule.issue_category);
+        if (intentMatch.matches) {
+          matches = true;
+          matchReason = intentMatch.reason;
+        }
+      }
+      
+      if (matches) {
+        // Check severity filter
+        const severity = this.determineSeverity(messageData, aiAnalysisResult);
+        const severityFilter = JSON.parse(rule.severity_filter || '["low","medium","high"]');
+        
+        if (severityFilter.includes(severity.toLowerCase())) {
+          matchingRules.push({
+            ...rule,
+            match_reason: matchReason,
+            severity: severity,
+            priority: rule.priority || rule.issue_category.priority_weight || 3
+          });
+        }
+      }
+    }
+    
+    // Sort by priority (lower number = higher priority)
+    return matchingRules.sort((a, b) => a.priority - b.priority);
+  }
+
+  /**
+   * Check if AI category matches issue category
+   */
+  async checkCategoryMatch(aiAnalysisResult, issueCategory) {
+    const aiCategory = aiAnalysisResult.advanced_category?.toUpperCase();
+    const categoryName = issueCategory.category_name?.toLowerCase();
+    
+    // Map AI categories to issue categories
+    const categoryMappings = {
+      'COMPLAINT': ['equipment', 'facility', 'staff', 'service', 'hygiene', 'billing', 'trainer', 'absence', 'management'],
+      'ESCALATION': ['safety', 'security', 'emergency'],
+      'URGENT': ['safety', 'security', 'equipment', 'emergency'],
+      'INSTRUCTION': ['equipment', 'facility', 'membership'],
+      'CASUAL': ['feedback', 'suggestion', 'general']
+    };
+    
+    if (aiCategory && categoryMappings[aiCategory]) {
+      for (const mapping of categoryMappings[aiCategory]) {
+        if (categoryName.includes(mapping)) {
+          return {
+            matches: true,
+            reason: `AI category "${aiCategory}" mapped to "${issueCategory.category_name}"`
+          };
+        }
+      }
+    }
+    
+    return { matches: false, reason: '' };
+  }
+
+  /**
+   * Check keyword match against issue category
+   */
+  async checkKeywordMatch(messageText, issueCategory) {
+    try {
+      const keywords = JSON.parse(issueCategory.keywords || '[]');
+      const messageWords = messageText.toLowerCase().split(/\s+/);
+      
+      const matchingKeywords = keywords.filter(keyword => 
+        messageWords.some(word => word.includes(keyword.toLowerCase()))
+      );
+      
+      if (matchingKeywords.length > 0) {
+        return {
+          matches: true,
+          reason: `Keywords matched: [${matchingKeywords.join(', ')}]`
+        };
+      }
+    } catch (error) {
+      logger.warn('Error parsing keywords for category:', issueCategory.category_name);
+    }
+    
+    return { matches: false, reason: '' };
+  }
+
+  /**
+   * Check intent-based matching
+   */
+  async checkIntentMatch(intent, issueCategory) {
+    if (!intent) return { matches: false, reason: '' };
+    
+    const intentMappings = {
+      'complaint': ['equipment', 'facility', 'staff', 'service', 'hygiene'],
+      'question': ['billing', 'membership', 'general'],
+      'emergency': ['safety', 'security'],
+      'booking': ['membership', 'general']
+    };
+    
+    const categoryName = issueCategory.category_name?.toLowerCase();
+    const mappings = intentMappings[intent.toLowerCase()] || [];
+    
+    for (const mapping of mappings) {
+      if (categoryName.includes(mapping)) {
+        return {
+          matches: true,
+          reason: `Intent "${intent}" mapped to "${issueCategory.category_name}"`
+        };
+      }
+    }
+    
+    return { matches: false, reason: '' };
+  }
+
+  /**
+   * Determine message severity based on AI analysis
+   */
+  determineSeverity(messageData, aiAnalysisResult) {
+    // High severity conditions
+    if (aiAnalysisResult.advanced_category === 'URGENT' || 
+        aiAnalysisResult.advanced_category === 'ESCALATION') {
+      return 'high';
+    }
+    
+    if (aiAnalysisResult.sentiment === 'negative' && 
+        aiAnalysisResult.confidence > 0.7) {
+      return 'high';
+    }
+    
+    // Medium severity conditions
+    if (aiAnalysisResult.intent === 'complaint' || 
+        aiAnalysisResult.sentiment === 'negative') {
+      return 'medium';
+    }
+    
+    // Default to low severity
+    return 'low';
+  }
+
+  /**
+   * Execute message routing to matched groups
+   */
+  async executeMessageRouting(matchingRules, messageData, aiAnalysisResult, routingId) {
+    const results = {
+      success: false,
+      routed_groups: [],
+      failed_groups: [],
+      total_attempts: 0,
+      escalation_triggered: false
+    };
+    
+    for (const rule of matchingRules) {
+      try {
+        results.total_attempts++;
+        
+        // Create formatted message for WhatsApp
+        const alertMessage = this.createAlertMessage(messageData, rule, aiAnalysisResult);
+        
+        // Send to WhatsApp group
+        const sendResult = await this.sendToWhatsAppGroup(rule.whatsapp_group.group_id, alertMessage);
+        
+        if (sendResult.success) {
+          results.routed_groups.push({
+            group_id: rule.whatsapp_group.group_id,
+            group_name: rule.whatsapp_group.group_name,
+            category: rule.issue_category.category_name,
+            match_reason: rule.match_reason,
+            severity: rule.severity
+          });
+          
+          results.success = true;
+          
+          // Log successful routing
+          await this.createRoutingLog(
+            messageData.id,
+            rule.whatsapp_group.id,
+            true,
+            null,
+            results.total_attempts,
+            routingId
+          );
+          
+          logger.info(`✅ ROUTING [${routingId}]: Message routed to "${rule.whatsapp_group.group_name}" (${rule.match_reason})`);
+          
+          // Stop after first successful routing unless escalation is needed
+          break;
+          
+        } else {
+          results.failed_groups.push({
+            group_id: rule.whatsapp_group.group_id,
+            group_name: rule.whatsapp_group.group_name,
+            error: sendResult.error
+          });
+          
+          // Log failed routing
+          await this.createRoutingLog(
+            messageData.id,
+            rule.whatsapp_group.id,
+            false,
+            sendResult.error,
+            results.total_attempts,
+            routingId
+          );
+          
+          logger.warn(`⚠️ ROUTING [${routingId}]: Failed to route to "${rule.whatsapp_group.group_name}": ${sendResult.error}`);
+        }
+        
+      } catch (error) {
+        logger.error(`❌ ROUTING [${routingId}]: Error routing to rule ${rule.id}:`, error);
+        results.failed_groups.push({
+          group_id: rule.whatsapp_group?.group_id || 'unknown',
+          group_name: rule.whatsapp_group?.group_name || 'unknown',
+          error: error.message
+        });
+      }
+    }
+    
+    return results;
+  }
+
+  /**
+   * Create formatted WhatsApp alert message
+   */
+  createAlertMessage(messageData, rule, aiAnalysisResult) {
+    const severityEmoji = rule.severity === 'high' ? '🔴' : rule.severity === 'medium' ? '🟡' : '🟢';
+    const categoryEmoji = this.getCategoryEmoji(rule.issue_category.category_name);
+    
+    return `🚨 WTF GYM ALERT 🚨
+${severityEmoji} Priority: ${rule.severity.toUpperCase()}
+
+${categoryEmoji} Category: ${rule.issue_category.category_name}
+🏢 Department: ${rule.issue_category.department}
+
+👤 Reported By: ${messageData.sender_name} (${messageData.sender_number})
+📍 Location: ${messageData.group_name || 'Direct Message'}
+
+📝 Issue: ${messageData.message}
+
+🧠 AI Analysis:
+• Sentiment: ${aiAnalysisResult.sentiment}
+• Intent: ${aiAnalysisResult.intent}
+• Confidence: ${Math.round(aiAnalysisResult.confidence * 100)}%
+
+🔍 Match Reason: ${rule.match_reason}
+
+🕒 ${new Date(messageData.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
+  }
+
+  /**
+   * Get category-specific emoji
+   */
+  getCategoryEmoji(categoryName) {
+    const categoryMap = {
+      'equipment': '🔧',
+      'facility': '🏢', 
+      'infrastructure': '🏗️',
+      'hvac': '❄️',
+      'hygiene': '🧽',
+      'staff': '👥',
+      'billing': '💰',
+      'safety': '🚨',
+      'feedback': '💬'
+    };
+    
+    const category = categoryName.toLowerCase();
+    for (const [key, emoji] of Object.entries(categoryMap)) {
+      if (category.includes(key)) {
+        return emoji;
+      }
+    }
+    
+    return '📋';
+  }
+
+  /**
    * Determine the best routing strategy based on AI analysis
    */
   async determineRoutingStrategy(aiAnalysisResult, contextualAnalysis) {
@@ -192,12 +540,91 @@ class WhatsAppRoutingEngine {
   }
 
   /**
+   * Get target groups based on routing rules (NEW METHOD)
+   */
+  async getRoutingRuleBasedGroups(aiAnalysisResult) {
+    try {
+      logger.info(`🔍 ROUTING RULES: Looking for rules matching category: ${aiAnalysisResult.advanced_category}`);
+      
+      // Get all active routing rules
+      const routingRules = await prisma.routingRule.findMany({
+        where: { 
+          is_active: true 
+        },
+        include: {
+          issue_category: true
+        }
+      });
+      
+      logger.info(`📊 ROUTING RULES: Found ${routingRules.length} active routing rules in database`);
+      
+      const targetGroups = [];
+      
+      for (const rule of routingRules) {
+        try {
+          // Check if this rule matches the AI analysis
+          const categoryMatch = await this.checkCategoryMatch(aiAnalysisResult, rule.issue_category);
+          
+          if (categoryMatch.matches) {
+            logger.info(`✅ ROUTING RULES: Rule ${rule.id} matches - ${categoryMatch.reason}`);
+            
+            // Get the target WhatsApp group for this rule
+            const targetGroup = await prisma.whatsAppGroup.findFirst({
+              where: {
+                OR: [
+                  { id: rule.whatsapp_group_id },
+                  { group_id: rule.whatsapp_group_id }
+                ],
+                is_active: true
+              }
+            });
+            
+            if (targetGroup) {
+              logger.info(`🎯 ROUTING RULES: Found target group: ${targetGroup.group_name || targetGroup.name}`);
+              targetGroups.push({
+                ...targetGroup,
+                routing_method: 'ROUTING_RULE',
+                match_score: 1.0,
+                rule_id: rule.id,
+                rule_reason: categoryMatch.reason
+              });
+            } else {
+              logger.warn(`⚠️ ROUTING RULES: Rule ${rule.id} target group not found or inactive: ${rule.whatsapp_group_id}`);
+            }
+          } else {
+            logger.info(`🔍 ROUTING RULES: Rule ${rule.id} does not match category ${aiAnalysisResult.advanced_category}`);
+          }
+        } catch (ruleError) {
+          logger.error(`❌ ROUTING RULES: Error processing rule ${rule.id}:`, ruleError);
+        }
+      }
+      
+      logger.info(`🎯 ROUTING RULES: Final result - ${targetGroups.length} target groups found`);
+      return targetGroups;
+      
+    } catch (error) {
+      logger.error('❌ ROUTING RULES: Failed to get routing rule based groups:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get target WhatsApp groups based on routing strategy
    */
   async getTargetGroups(strategy, aiAnalysisResult) {
     const targetGroups = [];
     
     try {
+      // 🔧 NEW: First try routing rules (highest priority)
+      const routingRuleGroups = await this.getRoutingRuleBasedGroups(aiAnalysisResult);
+      if (routingRuleGroups.length > 0) {
+        logger.info(`🎯 ROUTING RULES: Found ${routingRuleGroups.length} target groups from routing rules`);
+        targetGroups.push(...routingRuleGroups);
+        return targetGroups; // Use routing rules if available
+      } else {
+        logger.info(`🔍 ROUTING RULES: No matching routing rules found, using fallback strategy`);
+      }
+      
       // Method 1: Direct management routing (for emergencies/escalations)
       if (strategy.routing_methods.includes('DIRECT_MANAGEMENT') || 
           strategy.routing_methods.includes('MANAGEMENT_ESCALATION')) {
